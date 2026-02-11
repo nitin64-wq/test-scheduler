@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Take Exam</title>
+  <link rel="stylesheet" href="/static/style1.css">
+</head>
+
+<body class="exam-page">
+
+  <header class="dashboard-header">
+    <h2 id="examTitle">Exam</h2>
+    <span id="timer"></span>
+  </header>
+
+  <div class="dashboard-container">
+    <form id="examForm"></form>
+    <button type="submit" class="primary-btn" form="examForm">Submit Exam</button>
+  </div>
+
+  <script>
+    const examId = window.location.pathname.split("/").pop();
+    const studentId = JSON.parse(sessionStorage.getItem("authUser")).id;
+
+    let duration = 0;
+    let timerInterval;
+
+    async function loadExam() {
+      const res = await fetch(`/api/exams/${examId}/questions`);
+      const questions = await res.json();
+
+      const form = document.getElementById("examForm");
+      form.innerHTML = questions.map(q => `
+      <div class="exam-card">
+        <p><b>${q.question_text}</b></p>
+        <label><input type="radio" name="q${q.id}" value="A"> ${q.option_a}</label><br>
+        <label><input type="radio" name="q${q.id}" value="B"> ${q.option_b}</label><br>
+        <label><input type="radio" name="q${q.id}" value="C"> ${q.option_c}</label><br>
+        <label><input type="radio" name="q${q.id}" value="D"> ${q.option_d}</label>
+      </div>
+    `).join("");
+    }
+
+    // Timer
+    function startTimer(minutes) {
+      duration = minutes * 60;
+      timerInterval = setInterval(() => {
+        let m = Math.floor(duration / 60);
+        let s = duration % 60;
+        document.getElementById("timer").textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+        if (--duration < 0) {
+          clearInterval(timerInterval);
+          submitExam(); // auto submit
+        }
+      }, 1000);
+    }
+
+    // Submit Exam
+    document.getElementById("examForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      submitExam();
+    });
+
+    async function submitExam() {
+      clearInterval(timerInterval);
+
+      const answers = {};
+      document.querySelectorAll("input[type=radio]:checked").forEach(input => {
+        const qId = input.name.replace("q", "");
+        answers[qId] = input.value;
+      });
+
+      const res = await fetch(`/api/exams/${examId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_id: studentId, answers })
+      });
+
+      const result = await res.json();
+      alert(`You scored ${result.score} out of ${result.total}`);
+      window.location.href = "/student";
+    }
+
+    // Init
+    loadExam();
+    startTimer(30);
+  </script>
+
+  <!-- Proper footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <p class="project-name">📘 Monday Test Planner</p>
+      <p class="team">Team Members: <strong>Nitin Kumar</strong>, <strong>Jyoti Bishnoi</strong>, <strong>Sansarsagar
+          Singh</strong></p>
+      <p class="mentor">Mentor: <strong>Ms. Makinder Kaur</strong></p>
+    </div>
+  </footer>
+
+</body>
+
+</html>

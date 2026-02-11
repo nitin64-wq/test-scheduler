@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register | Monday Test Planner</title>
+  <!-- <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"> -->
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+  <div id="ff">
+    <div id="sr">
+      <h1>Monday Test Planner</h1>
+      <h2>🧑‍🎓 Student Registration</h2>
+    </div>
+
+    <form id="registerForm">
+      <label for="fullName">Full Name</label>
+      <input type="text" id="fullName" placeholder="Full name" required>
+
+      <label for="regUsername">Username</label>
+      <input type="text" id="regUsername" placeholder="Username" required>
+
+      <label for="regPassword">Password</label>
+      <input type="password" id="regPassword" placeholder="Password" required>
+
+      <label for="regConfirmPassword">Confirm Password</label>
+      <input type="password" id="regConfirmPassword" placeholder="Confirm Password" required>
+
+      <label for="regEmail">Email</label>
+      <input type="email" id="regEmail" placeholder="Email" required>
+
+      <label for="regNumber">Phone Number</label>
+      <input type="tel" id="regNumber" placeholder="Mobile number" required>
+
+
+
+      <input type="checkbox" id="terms" name="terms">
+      <label for="terms">Agree to terms and conditions</label>
+
+      <button class="button" type="submit">Register</button>
+
+      <p style="text-align:center;">Already have an account? <a href="/login">Login here</a></p>
+
+    </form>
+  </div>
+
+  <p id="registerMessage"></p>
+
+
+  <!-- <script src="{{ url_for('static', filename='register.js') }}"></script> -->
+  <script src="/static/register.js"></script>
+
+
+  <link rel="stylesheet" href="/static/footer.css"> <!-- always after -->
+</body>
+
+</html>

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Take Exam</title>
+    <link rel="stylesheet" href="/static/style1.css">
+    <style>
+        /* Layout */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .exam-container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Question Palette Sidebar */
+        .sidebar {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+
+        .sidebar h3 {
+            margin-top: 0;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .question-palette {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+        }
+
+        .palette-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 1px solid #ddd;
+            background: #f8f9fa;
+            color: #333;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .palette-btn:hover {
+            background: #e2e6ea;
+            border-color: #adb5bd;
+        }
+
+        .palette-btn.answered {
+            background: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
+
+        .palette-btn.active {
+            border: 2px solid #007bff;
+        }
+
+        /* Existing styles */
+        .question-card {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .question-text {
+            font-weight: 600;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .options-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .options-list li {
+            margin-bottom: 12px;
+        }
+
+        /* Legend */
+        .palette-legend {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: #666;
+            display: flex;
+            gap: 15px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .dot.green {
+            background: #28a745;
+        }
+
+        .dot.gray {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        .submit-btn:hover {
+            background: #218838;
+        }
+
+        #timer {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #dc3545;
+            text-align: right;
+            margin-bottom: 0;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                order: -1;
+                /* Show above questions on mobile? Or below? Let's keep it normal flow but top */
+                position: static;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="dashboard-header">
+        <h2>📝 Exam Session</h2>
+        <div id="timer">Time Left: --:--</div>
+    </header>
+
+
+    <!-- Instructions Overlay -->
+    <style>
+        .instructions-container {
+            max-width: 800px;
+            margin: 50px auto;
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .instructions-container h2 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+
+        .instructions-list {
+            margin-bottom: 30px;
+        }
+
+        .instructions-list li {
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .start-exam-btn {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .start-exam-btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .start-exam-btn:hover:not(:disabled) {
+            background: #2980b9;
+        }
+    </style>
+
+    <div class="instructions-container" id="instructions-view">
+        <h2>📜 Exam Instructions & Rules</h2>
+        <ul class="instructions-list">
+            <li><strong>1. Camera & Microphone:</strong> You must allow access to your camera and microphone. They will
+                be monitored throughout the exam.</li>
+            <li><strong>2. Fullscreen Mode:</strong> The exam effectively requires you to stay on this tab.</li>
+            <li><strong>3. No Tab Switching:</strong> Switching tabs or minimizing the browser is strictly prohibited.
+            </li>
+            <li><strong>4. Warning System:</strong> You will receive <strong>one usage warning</strong> for tab
+                switching. A second violation will result in <strong>auto-submission</strong>.</li>
+            <li><strong>5. Timer:</strong> Keep an eye on the timer. The exam submits automatically when time runs out.
+            </li>
+            <li><strong>6. Integrity:</strong> Any attempt to cheat or use unfair means will be recorded.</li>
+        </ul>
+
+        <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" id="agreeCheckbox" style="width: 20px; height: 20px;">
+            <label for="agreeCheckbox" style="font-size: 1.1rem; cursor: pointer;">I have read and agree to follow all
+                the instructions.</label>
+        </div>
+
+        <button id="startExamBtn" class="start-exam-btn" disabled>Start Exam</button>
+    </div>
+
+    <div class="container" id="exam-view" style="display: none;">
+
+        <!-- Main Question Area -->
+        <div class="exam-container">
+            <h2 id="examTitle">Loading Exam...</h2>
+
+            <div id="camera-container" style="margin-bottom: 20px; text-align: center;">
+                <video id="webcam" autoplay playsinline width="320" height="240"
+                    style="border: 2px solid #ccc; border-radius: 8px; background: #000;"></video>
+                <div id="camera-status" style="margin-top: 5px; color: #666; font-size: 0.9em;">Camera & Mic access
+                    required</div>
+            </div>
+
+            <p id="examDesc"></p>
+
+            <div id="warning-box"
+                style="display: none; background-color: #ffeeba; color: #856404; padding: 15px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #ffeeba;">
+                <strong>Warning:</strong> <span id="warning-message"></span>
+            </div>
+
+            <form id="examForm">
+                <div id="questionsContainer"></div>
+                <button type="submit" class="submit-btn">Submit Exam</button>
+            </form>
+        </div>
+
+        <!-- Sidebar Question Palette -->
+        <aside class="sidebar">
+            <h3>Question Palette</h3>
+            <div class="question-palette" id="questionPalette">
+                <!-- Dynamically populated -->
+            </div>
+
+            <div class="palette-legend">
+                <div class="legend-item"><span class="dot green"></span> Answered</div>
+                <div class="legend-item"><span class="dot gray"></span> Not Visited</div>
+            </div>
+        </aside>
+    </div>
+
+    <script src="/static/exam.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard - Monday Test Planner</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles3.css') }}">
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+  <div class="admin-container" role="main">
+    <header class="admin-header">
+      <h1 role="heading" aria-level="1">
+        <i class="fas fa-user-shield" aria-hidden="true"></i>
+        Admin Dashboard
+      </h1>
+      <button id="logoutBtn" class="logout-btn" aria-label="Logout">
+        <i class="fas fa-sign-out-alt"></i> Logout
+      </button>
+    </header>
+
+    <!-- Admin authorization warning -->
+    <div id="adminWarning" class="alert" role="alert" hidden>
+      <i class="fas fa-exclamation-triangle"></i>
+      You must have admin privileges to view this page
+    </div>
+
+    <!-- Student Management -->
+    <section class="admin-card">
+      <h2 id="studentTableHeading">
+        <i class="fas fa-users"></i> Student Management
+      </h2>
+      <div role="region" aria-labelledby="studentTableHeading">
+        <table class="data-table" aria-describedby="studentTableDesc">
+          <caption id="studentTableDesc" class="sr-only">List of registered students</caption>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="studentTable">
+            <!-- Rows will be injected dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Pagination -->
+    <div class="pagination">
+      <button id="prevPage" onclick="changePage(-1)">Previous</button>
+      <span id="pageInfo">Page 1</span>
+      <button id="nextPage" onclick="changePage(1)">Next</button>
+    </div>
+
+    <!-- Exam Creation -->
+    <section class="exam-section admin-card">
+      <h2><i class="fas fa-clipboard-list"></i> Create New Exam</h2>
+      <form id="createExamForm">
+        <label for="examTitle">Exam Title</label>
+        <input type="text" id="examTitle" placeholder="Enter exam title" required>
+
+        <label for="examDesc">Description</label>
+        <textarea id="examDesc" placeholder="Enter short description"></textarea>
+
+        <label for="examStartTime">Start Time</label>
+        <input type="datetime-local" id="examStartTime" required>
+
+        <label for="examDuration">Duration (minutes)</label>
+        <input type="number" id="examDuration" placeholder="e.g. 60" required>
+
+        <button type="submit"><i class="fas fa-plus-circle"></i> Create Exam</button>
+      </form>
+    </section>
+
+    <!-- Add Questions to Exam -->
+    <section class="exam-section admin-card">
+      <h2><i class="fas fa-question-circle"></i> Add Question</h2>
+      <form id="addQuestionForm">
+        <label for="examSelect">Select Exam</label>
+        <select id="examSelect" required></select>
+
+        <label for="questionText">Question</label>
+        <textarea id="questionText" placeholder="Enter question" required></textarea>
+
+        <label>Options</label>
+        <input type="text" id="optionA" placeholder="Option A" required>
+        <input type="text" id="optionB" placeholder="Option B" required>
+        <input type="text" id="optionC" placeholder="Option C" required>
+        <input type="text" id="optionD" placeholder="Option D" required>
+
+        <label for="correctOption">Correct Option</label>
+        <select id="correctOption" required>
+          <option value="A">A</option>
+          <option value="B">B</option>
+          <option value="C">C</option>
+          <option value="D">D</option>
+        </select>
+
+        <button type="submit"><i class="fas fa-plus-circle"></i> Add Question</button>
+      </form>
+    </section>
+
+
+    <!-- Student Activity -->
+    <section class="admin-card">
+      <h2><i class="fas fa-user-check"></i> Student Activity</h2>
+      <div id="studentActivity"></div>
+      <button onclick="exportData()">Export Data</button>
+    </section>
+
+    <!-- System Analytics -->
+    <section class="admin-card">
+      <h2><i class="fas fa-chart-line"></i> System Analytics</h2>
+      <div class="dashboard">
+        <div class="card" id="total">Total Students: 0</div>
+        <div class="card" id="active">Active Students: 0</div>
+        <div class="card" id="today">Active Today: 0</div>
+        <div class="card" id="tests">Scheduled Tests: 0</div>
+        <div class="card" id="average">Avg. Students/Test: 0</div>
+      </div>
+    </section>
+
+    <!-- System Control -->
+    <section class="admin-card">
+      <h2><i class="fas fa-tools"></i> System Control</h2>
+      <div class="dashboard">
+        <div class="card">
+          <h3>Data Management</h3>
+          <button>Export Students Data</button>
+          <button>Create Backup</button>
+        </div>
+        <div class="card">
+          <h3>System Maintenance</h3>
+          <button class="danger" onclick="openModal()">Clear All Tests</button>
+          <button class="danger" onclick="openModal()">Reset System</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal" id="confirmModal">
+    <div class="modal-content">
+      <p>Are you sure you want to perform this action?</p>
+      <div class="modal-buttons">
+        <button onclick="confirmAction()">Confirm</button>
+        <button onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JS -->
+  <script src="{{ url_for('static', filename='admin1.js') }}"></script>
+
+  <!-- Proper footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <p class="project-name">📘 Monday Test Planner</p>
+      <p class="team">Team Members: <strong>Nitin Kumar</strong>, <strong>Jyoti Bishnoi</strong>, <strong>Sansarsagar
+          Singh</strong></p>
+      <p class="mentor">Mentor: <strong>Ms. Makinder Kaur</strong></p>
+    </div>
+  </footer>
+
+</body>
+
+</html>
