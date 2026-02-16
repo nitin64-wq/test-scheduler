@@ -285,68 +285,7 @@ body {
   animation: fadeIn 0.4s ease-in-out;
 }
 
-/* =========================
-   Modal
-========================= 
-.modal {
-  display: none;
-  position: fixed;
-  z-index: 1000;
-  top: 0; left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0,0,0,0.6);
-  justify-content: center;
-  align-items: center;
-  animation: fadeIn 0.3s ease-in-out;
-}
 
-.modal-content {
-  background: white;
-  padding: 30px;
-  border-radius: 12px;
-  width: 400px;
-  text-align: center;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-  animation: slideDown 0.4s ease;
-}
-
-.modal-buttons {
-  margin-top: 20px;
-  display: flex;
-  justify-content: space-around;
-}
-
-.modal-buttons button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.modal-buttons button:first-child {
-  background: #e74c3c;
-  color: white;
-}
-
-.modal-buttons button:last-child {
-  background: #bdc3c7;
-  color: #2c3e50;
-}
-
-/* =========================
-   Animations
-========================= 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideDown {
-  from { transform: translateY(-20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}*/
 /* =========================
    Admin Page Styles
 ========================= */
@@ -572,55 +511,9 @@ form button:hover {
   background: #2980b9;
 }
 
-/* ==============================
-   Modal
-   ============================== */
-.modal {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
 
-.modal-content {
-  background: #fff;
-  padding: 25px;
-  border-radius: 12px;
-  text-align: center;
-  max-width: 400px;
-  width: 90%;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
-}
 
-.modal-buttons {
-  margin-top: 15px;
-  display: flex;
-  justify-content: space-around;
-}
 
-.modal-buttons button {
-  padding: 10px 18px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.modal-buttons button:first-child {
-  background: #e74c3c;
-  color: #fff;
-}
-
-.modal-buttons button:last-child {
-  background: #95a5a6;
-  color: #fff;
-}
 
 /* ============================= */
 /* 📱 Responsive Styles          */

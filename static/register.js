@@ -1,17 +1,19 @@
 document.getElementById('registerForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  
+
   const fullName = document.getElementById('fullName').value.trim();
   const email = document.getElementById('regEmail').value.trim();
   const username = document.getElementById('regUsername').value.trim();
   const password = document.getElementById('regPassword').value;
   const confirmPassword = document.getElementById('regConfirmPassword').value;
   const phone = document.getElementById('regNumber').value;
+  const course = document.getElementById('regCourse').value;
   const terms = document.getElementById('terms').checked;
 
   const errors = [];
   if (!/^[A-Za-z ]{3,50}$/.test(fullName)) errors.push('Invalid full name');
   if (!validateEmail(email)) errors.push('Invalid email format');
+  if (!course) errors.push('Please select a course');
   if (password.length < 8) errors.push('Password too short');
   if (password !== confirmPassword) errors.push('Passwords mismatch');
   if (!terms) errors.push('Must accept terms');
@@ -22,7 +24,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
   }
 
   try {
-    const response = await fetch('http://localhost:5000/api/register', {
+    const response = await fetch('/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -30,7 +32,8 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         email,
         username,
         password,
-        phone
+        phone,
+        course
       })
     });
 

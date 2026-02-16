@@ -7,17 +7,35 @@ import csv
 import io
 import pandas as pd
 import docx
+import json
+import os
+import base64
+import uuid
+from dotenv import load_dotenv
+ 
+try:
+    from deepface import DeepFace
+    DEEPFACE_AVAILABLE = True
+    DEEPFACE_IMPORT_ERROR = None
+except Exception as deepface_import_err:
+    DeepFace = None
+    DEEPFACE_AVAILABLE = False
+    DEEPFACE_IMPORT_ERROR = str(deepface_import_err)
+
+load_dotenv()
 
 # Database connection 
 def connect_db():
     return mysql.connector.connect(
-        host='localhost',
-        user='root',
-        password='',
-        database='test'
+        host=os.getenv('DB_HOST', 'localhost'),
+        user=os.getenv('DB_USER', 'root'),
+        password=os.getenv('DB_PASSWORD', ''),
+        database=os.getenv('DB_NAME', 'test')
     )
 
 app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload size for camera captures
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 @app.route('/')
@@ -32,17 +50,27 @@ def login_page():
 def register_page():
     return render_template('register.html')
 
+from flask import make_response as flask_make_response
+
+def no_cache_response(template, **kwargs):
+    """Render template with no-cache headers to prevent back-button access after logout."""
+    resp = flask_make_response(render_template(template, **kwargs))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
 @app.route('/student')
 def student_page():
-    return render_template('student.html')
+    return no_cache_response('student.html')
 
 @app.route('/admin-dashboard')
 def serve_admin_dashboard():
-    return render_template('admin1.html')
+    return no_cache_response('admin1.html')
 
 @app.route("/exam/<int:exam_id>")
 def serve_exam(exam_id):
-    return render_template("exam.html")
+    return no_cache_response("exam.html")
 
 
 
@@ -70,19 +98,25 @@ def get_students():
     # Better: Try to select, if fail, fallback? No, simpler to just use what we know exists + mocks.
     # Actually, we can check if columns exist dynamically but that's slow.
     # Let's revert to standard SELECT and add dummy keys.
-    cursor.execute("SELECT id, username, email, fullname, phone FROM students")
+    cursor.execute("SELECT id, username, email, fullname, phone, course, last_login FROM students")
     students = cursor.fetchall()
 
-    # Check exam attempts for each student
+    # Check exam attempts and login status for each student
     for s in students:
-        # Mock missing columns for frontend
-        s['created_at'] = datetime.datetime.now().isoformat() # or some default
-        s['last_login'] = None
+        # Convert last_login to ISO string for frontend (avoid Flask's UTC conversion)
+        if s['last_login']:
+            s['last_login'] = s['last_login'].strftime('%Y-%m-%dT%H:%M:%S')
+            s['created_at'] = s['last_login']
+            # Consider "logged in" if last_login date matches today
+            s['logged_in'] = s['last_login'][:10] == datetime.datetime.now().strftime('%Y-%m-%d')
+        else:
+            s['last_login'] = None
+            s['created_at'] = None
+            s['logged_in'] = False
         
         cursor.execute("SELECT COUNT(*) as count FROM exam_attempts WHERE student_id = %s", (s['id'],))
         count = cursor.fetchone()['count']
         s['attempted_exam'] = count > 0
-        s['logged_in'] = False 
 
     cursor.close()
     conn.close()
@@ -94,7 +128,10 @@ def clear_all_tests():
     conn = connect_db()
     cursor = conn.cursor()
     try:
-        # Delete all exams (Cascades to questions and attempts)
+        # Delete all related data first to satisfy Foreign Keys
+        cursor.execute("DELETE FROM exam_evidence") # Clear evidence first
+        cursor.execute("DELETE FROM exam_attempts")
+        cursor.execute("DELETE FROM questions")
         cursor.execute("DELETE FROM exams")
         conn.commit()
         return jsonify({'message': 'All exams and related data cleared successfully'}), 200
@@ -113,6 +150,7 @@ def reset_system():
         # Delete all students and exams
         # Disable foreign key checks to ensure smooth truncation/deletion if needed, 
         # but DELETE shouldn't need it if cascade works. 
+        cursor.execute("DELETE FROM exam_evidence") # Clear evidence
         cursor.execute("DELETE FROM exam_attempts")
         cursor.execute("DELETE FROM questions")
         cursor.execute("DELETE FROM exams")
@@ -132,7 +170,7 @@ def register_student():
     cursor = conn.cursor()
     try:
         data = request.get_json()
-        required_fields = ['username', 'password', 'email', 'fullName', 'phone']
+        required_fields = ['username', 'password', 'email', 'fullName', 'phone', 'course']
         if not all(field in data for field in required_fields):
             return jsonify({'error': 'All fields are required'}), 400
 
@@ -140,9 +178,9 @@ def register_student():
 
         # Reverted to match original schema (no created_at)
         cursor.execute("""
-            INSERT INTO students (username, password, email, fullname, phone)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (data['username'], hashed_password, data['email'], data['fullName'], data['phone']))
+            INSERT INTO students (username, password, email, fullname, phone, course)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (data['username'], hashed_password, data['email'], data['fullName'], data['phone'], data['course']))
         conn.commit()
         return jsonify({'message': 'Registration successful'}), 201
     except Exception as e:
@@ -175,15 +213,15 @@ def login():
         if role == 'student':
             conn = connect_db()
             cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM students WHERE username = %s", (username,))
+            cursor.execute("SELECT * FROM students WHERE username = %s OR email = %s", (username, username))
             student = cursor.fetchone()
             if not student:
                 return jsonify({'success': False, 'message': 'No student found'}), 404
 
             if bcrypt.checkpw(password.encode('utf-8'), student['password'].encode('utf-8')):
-                # SKIP last_login update if column missing
-                # cursor.execute("UPDATE students SET last_login = NOW() WHERE id = %s", (student['id'],))
-                # conn.commit()
+                # Update last_login timestamp
+                cursor.execute("UPDATE students SET last_login = NOW() WHERE id = %s", (student['id'],))
+                conn.commit()
                 
                 # Remove password from response
                 student.pop('password', None)
@@ -209,9 +247,15 @@ def create_exam():
         description = request.form.get('description')
         start_time_str = request.form.get('start_time')
         duration_minutes = request.form.get('duration') or request.form.get('duration_minutes')
+        course = request.form.get('course')
+        exam_password = request.form.get('exam_password', '').strip() or None
+        
+        # Security enabled (default true if not provided or if 'true')
+        security_enabled = request.form.get('security_enabled', 'true').lower() == 'true'
+        
         file = request.files.get('file')
 
-        print(f"Parsed: title={title}, start={start_time_str}, dur={duration_minutes}, file={file}")
+        print(f"Parsed: title={title}, start={start_time_str}, dur={duration_minutes}, course={course}, file={file}")
 
         if not title:
             return jsonify({'error': 'Missing title'}), 400
@@ -234,44 +278,108 @@ def create_exam():
 
         try:
             if filename.endswith('.xlsx'):
-                # required keys
-                required_columns = ['question_text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_option']
+                # Try to read the Excel file
+                try:
+                    file.stream.seek(0)
+                    xls = pd.ExcelFile(file)
+                    print(f"DEBUG: Excel Sheets found: {xls.sheet_names}")
+                except Exception as e:
+                    return jsonify({'error': f"Invalid Excel file: {str(e)}"}), 400
 
-                # Use ExcelFile to read sheets without resetting stream manually if possible, 
-                # but better to seek(0) to be safe if it was read before.
-                file.stream.seek(0)
-                xls = pd.ExcelFile(file)
-                print(f"DEBUG: Sheets found: {xls.sheet_names}")
-                
+                # flexible column mapping
+                required_fields = {
+                    'question_text': ['question_text', 'question', 'question text', 'q', 'questions', 'statement'],
+                    'option_a': ['option_a', 'option a', 'a', '(a)', 'opt a', 'choice a'],
+                    'option_b': ['option_b', 'option b', 'b', '(b)', 'opt b', 'choice b'],
+                    'option_c': ['option_c', 'option c', 'c', '(c)', 'opt c', 'choice c'],
+                    'option_d': ['option_d', 'option d', 'd', '(d)', 'opt d', 'choice d'],
+                    'correct_option': ['correct_option', 'correct option', 'correct', 'answer', 'ans', 'correct answer']
+                }
+
                 df = None
                 found_correct_sheet = False
-                
+                final_col_map = {}
+
                 for sheet in xls.sheet_names:
                     temp_df = pd.read_excel(xls, sheet_name=sheet)
-                    # Normalize columns: strip whitespace and lower case just in case? 
-                    # User requested specific keys, but let's stick to strip() for now.
-                    temp_df.columns = temp_df.columns.str.strip()
+                    # Create a normalized map of columns: lowercase and stripped -> original column name
+                    cols_lower = {str(c).strip().lower(): c for c in temp_df.columns}
                     
-                    # Debug print
-                    print(f"DEBUG: Sheet '{sheet}' columns: {temp_df.columns.tolist()}")
+                    print(f"DEBUG: Sheet '{sheet}' normalized columns: {list(cols_lower.keys())}")
                     
-                    if all(col in temp_df.columns for col in required_columns):
+                    # Check if this sheet has all required fields (using synonyms)
+                    sheet_col_map = {}
+                    missing_fields = []
+                    
+                    for field, synonyms in required_fields.items():
+                        found_col = None
+                        for syn in synonyms:
+                            if syn in cols_lower:
+                                found_col = cols_lower[syn]
+                                break
+                        if found_col:
+                            sheet_col_map[field] = found_col
+                        else:
+                            missing_fields.append(field)
+                    
+                    if not missing_fields:
                         df = temp_df
+                        final_col_map = sheet_col_map
                         found_correct_sheet = True
+                        print(f"DEBUG: Found valid sheet '{sheet}' with mapping: {final_col_map}")
                         break
+                    else:
+                        print(f"DEBUG: Sheet '{sheet}' missing fields: {missing_fields}")
                 
                 if not found_correct_sheet:
-                     return jsonify({'error': f"Invalid Excel format. scanned sheets: {xls.sheet_names}. Required: {required_columns}"}), 400
+                     return jsonify({'error': f"Invalid Excel format. scanned sheets: {xls.sheet_names}. Could not find columns for: Question, Option A, B, C, D, Answer."}), 400
                 
+                # Replace NaN values with empty strings
+                df = df.fillna('')
+                
+                count_uploaded = 0
+                count_skipped = 0
+
                 for index, row in df.iterrows():
+                    # Get values using the map
+                    q_val = row[final_col_map['question_text']]
+                    
+                    # Skip rows where question_text is empty
+                    if str(q_val).strip() == '':
+                        count_skipped += 1
+                        continue
+
+                    # Helper to clean text
+                    def clean_cell(val):
+                        s = str(val).strip()
+                        if s.endswith('.0'): s = s[:-2] # Handle float 1.0 -> 1
+                        return s
+
+                    q_text = clean_cell(q_val)
+                    opt_a = clean_cell(row[final_col_map['option_a']])
+                    opt_b = clean_cell(row[final_col_map['option_b']])
+                    opt_c = clean_cell(row[final_col_map['option_c']])
+                    opt_d = clean_cell(row[final_col_map['option_d']])
+                    correct = clean_cell(row[final_col_map['correct_option']])
+
+                    # Ensure options are not empty? 
+                    # If they are empty, we still upload, but maybe we should flag it?
+                    # The user said "not showing options", which implies they are empty.
+                    # We will log it.
+                    if not opt_a and not opt_b:
+                        print(f"WARNING: Row {index} has empty options A/B. Q: {q_text[:20]}...")
+
                     questions_list.append({
-                        'question_text': row['question_text'],
-                        'option_a': row['option_a'],
-                        'option_b': row['option_b'],
-                        'option_c': row['option_c'],
-                        'option_d': row['option_d'],
-                        'correct_option': row['correct_option']
+                        'question_text': q_text,
+                        'option_a': opt_a,
+                        'option_b': opt_b,
+                        'option_c': opt_c,
+                        'option_d': opt_d,
+                        'correct_option': correct
                     })
+                    count_uploaded += 1
+                
+                print(f"DEBUG: Excel processing complete. Uploaded: {count_uploaded}, Skipped: {count_skipped}")
 
             elif filename.endswith('.docx'):
                 doc = docx.Document(file)
@@ -296,9 +404,9 @@ def create_exam():
         
         # Insert Exam
         cursor.execute("""
-            INSERT INTO exams (title, description, start_time, duration_minutes)
-            VALUES (%s, %s, %s, %s)
-        """, (title, description, start_time, duration_minutes))
+            INSERT INTO exams (title, description, start_time, duration_minutes, course, exam_password, security_enabled)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (title, description, start_time, duration_minutes, course, exam_password, security_enabled))
         conn.commit()
         exam_id = cursor.lastrowid
 
@@ -365,6 +473,59 @@ def parse_text_questions(text):
         questions.append(current_q)
         
     return questions
+
+def analyze_evidence_with_deepface(image_path):
+    """Run DeepFace checks and return normalized face analysis data."""
+    result = {
+        'enabled': DEEPFACE_AVAILABLE,
+        'face_count': None,
+        'dominant_emotion': None,
+        'violation_type': None,
+        'analysis_error': None
+    }
+
+    if not DEEPFACE_AVAILABLE:
+        result['analysis_error'] = DEEPFACE_IMPORT_ERROR or 'DeepFace is not installed'
+        return result
+
+    try:
+        faces = DeepFace.extract_faces(
+            img_path=image_path,
+            detector_backend='opencv',
+            enforce_detection=False,
+            align=False
+        )
+        valid_faces = []
+        for face in faces:
+            area = face.get('facial_area', {}) if isinstance(face, dict) else {}
+            if area.get('w', 0) > 0 and area.get('h', 0) > 0:
+                valid_faces.append(face)
+
+        face_count = len(valid_faces)
+        result['face_count'] = face_count
+
+        if face_count == 0:
+            result['violation_type'] = 'no_face_detected'
+        elif face_count > 1:
+            result['violation_type'] = 'multiple_faces_detected'
+        else:
+            result['violation_type'] = 'face_ok'
+
+        analysis = DeepFace.analyze(
+            img_path=image_path,
+            actions=['emotion'],
+            detector_backend='opencv',
+            enforce_detection=False
+        )
+        if isinstance(analysis, list) and analysis:
+            analysis = analysis[0]
+        if isinstance(analysis, dict):
+            result['dominant_emotion'] = analysis.get('dominant_emotion')
+    except Exception as e:
+        result['analysis_error'] = str(e)
+        result['violation_type'] = 'deepface_error'
+
+    return result
     
 # Get questions for an exam
 @app.route('/api/exams/<int:exam_id>/questions', methods=['GET'])
@@ -387,8 +548,7 @@ def submit_exam(exam_id):
     data = request.get_json()
     student_id = data.get("student_id")
     answers = data.get("answers", {})
-    evidence_image = data.get("evidence_image") # Base64 string from camera
-    evidence_audio = data.get("evidence_audio") # Base64 string from mic
+
     violation_alert = data.get("violation_alert", False)
 
     conn = connect_db()
@@ -406,66 +566,28 @@ def submit_exam(exam_id):
 
     total = len(correct_answers)
 
-    # Save exam attempt
-    cursor.execute("""
-        INSERT INTO exam_attempts (exam_id, student_id, started_at, submitted_at, score)
-        VALUES (%s, %s, NOW(), NOW(), %s)
-    """, (exam_id, student_id, score))
-    exam_attempt_id = cursor.lastrowid
+    # Save exam attempt (Upsert: Update if exists, else Insert)
+    # We check if a record exists for this student/exam combo
+    cursor.execute("SELECT id FROM exam_attempts WHERE exam_id = %s AND student_id = %s", (exam_id, student_id))
+    existing_attempt = cursor.fetchone()
+
+    if existing_attempt:
+        # Update existing record (e.g. completing a retest)
+        cursor.execute("""
+            UPDATE exam_attempts 
+            SET started_at = IFNULL(started_at, NOW()), submitted_at = NOW(), score = %s
+            WHERE id = %s
+        """, (score, existing_attempt['id']))
+        exam_attempt_id = existing_attempt['id']
+    else:
+        # New insert
+        cursor.execute("""
+            INSERT INTO exam_attempts (exam_id, student_id, started_at, submitted_at, score)
+            VALUES (%s, %s, NOW(), NOW(), %s)
+        """, (exam_id, student_id, score))
+        exam_attempt_id = cursor.lastrowid
+
     conn.commit()
-
-    # Save evidence if provided
-    if evidence_image or evidence_audio:
-        try:
-            import base64
-            import os
-            
-            # Create upload dir if not exists
-            upload_folder = os.path.join("uploads", "evidence")
-            os.makedirs(upload_folder, exist_ok=True)
-            
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            image_filepath = None
-            audio_filepath = None
-
-            # 1. Save Image
-            if evidence_image:
-                filename = f"exam_{exam_id}_stud_{student_id}_{timestamp}.png"
-                image_filepath = os.path.join(upload_folder, filename)
-                
-                if "," in evidence_image:
-                    header, encoded = evidence_image.split(",", 1)
-                else:
-                    encoded = evidence_image
-                
-                with open(image_filepath, "wb") as f:
-                    f.write(base64.b64decode(encoded))
-
-            # 2. Save Audio
-            if evidence_audio:
-                filename = f"exam_{exam_id}_stud_{student_id}_{timestamp}.webm"
-                audio_filepath = os.path.join(upload_folder, filename)
-                
-                if "," in evidence_audio:
-                    header, encoded = evidence_audio.split(",", 1)
-                else:
-                    encoded = evidence_audio
-                
-                with open(audio_filepath, "wb") as f:
-                    f.write(base64.b64decode(encoded))
-
-            # Log to DB
-            violation_type = "Tab Switch Violation" if violation_alert else "Routine/Final Evidence"
-            
-            cursor.execute("""
-                INSERT INTO exam_evidence (exam_id, student_id, image_path, audio_path, violation_type)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (exam_id, student_id, image_filepath, audio_filepath, violation_type))
-            conn.commit()
-            
-        except Exception as e:
-            print(f"Error saving evidence: {e}")
-            # Don't fail the submission just because evidence failed
 
     cursor.close()
     conn.close()
@@ -473,6 +595,77 @@ def submit_exam(exam_id):
     return jsonify({"score": score, "total": total, "attempt_id": exam_attempt_id}), 200
 
 
+
+# ✅ Reset Exam Attempt (Enable Retest)
+@app.route('/api/attempts/reset', methods=['POST'])
+def reset_exam_attempt():
+    data = request.get_json()
+    student_id = data.get('student_id')
+    exam_id = data.get('exam_id')
+
+    if not student_id or not exam_id:
+        return jsonify({'error': 'Missing student_id or exam_id'}), 400
+
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        # Instead of deleting, mark as retest allowed (reset submission details)
+        # We keep is_retest=1 to indicate this is a retest scenario
+        cursor.execute("""
+            UPDATE exam_attempts 
+            SET submitted_at = NULL, score = NULL, is_retest = 1, started_at = NULL
+            WHERE student_id = %s AND exam_id = %s
+        """, (student_id, exam_id))
+        
+        updated_count = cursor.rowcount
+        conn.commit()
+        
+        if updated_count > 0:
+            return jsonify({'message': 'Exam attempt reset. Student can now retest.'}), 200
+        else:
+            return jsonify({'message': 'No attempt found to reset.'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# ✅ Get All Attempts (for Admin "Manage Results/Retest")
+@app.route('/api/admin/attempts', methods=['GET'])
+def get_all_attempts():
+    conn = connect_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+            SELECT 
+                ea.id, 
+                ea.student_id, 
+                s.fullname as student_name, 
+                s.course as student_course,
+                ea.exam_id, 
+                e.title as exam_title, 
+                ea.score, 
+                ea.submitted_at,
+                (SELECT COUNT(*) FROM questions q WHERE q.exam_id = ea.exam_id) as total_questions
+            FROM exam_attempts ea
+            JOIN students s ON ea.student_id = s.id
+            JOIN exams e ON ea.exam_id = e.id
+            ORDER BY ea.submitted_at DESC
+        """
+        cursor.execute(query)
+        attempts = cursor.fetchall()
+        
+        # Format dates
+        for a in attempts:
+            if a['submitted_at']:
+                a['submitted_at'] = a['submitted_at'].strftime('%Y-%m-%d %H:%M:%S')
+                
+        return jsonify(attempts), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 # ✅ Check if exam already attempted
 @app.route('/api/exams/<int:exam_id>/attempted', methods=['GET'])
@@ -484,7 +677,8 @@ def check_exam_attempt(exam_id):
     conn = connect_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT COUNT(*) as count FROM exam_attempts WHERE exam_id = %s AND student_id = %s", (exam_id, student_id))
+        # Check if submitted_at is NOT NULL
+        cursor.execute("SELECT COUNT(*) as count FROM exam_attempts WHERE exam_id = %s AND student_id = %s AND submitted_at IS NOT NULL", (exam_id, student_id))
         result = cursor.fetchone()
         count = result['count'] if result else 0
         return jsonify({'attempted': count > 0}), 200
@@ -494,20 +688,167 @@ def check_exam_attempt(exam_id):
         cursor.close()
         conn.close()
 
+# ✅ Get all exam statuses for a student
+@app.route('/api/exams/attempted-list', methods=['GET'])
+def get_attempted_exams_list():
+    student_id = request.args.get('student_id')
+    if not student_id:
+        return jsonify({'error': 'Student ID required'}), 400
+    conn = connect_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Fetch status details
+        cursor.execute("SELECT exam_id, submitted_at, is_retest FROM exam_attempts WHERE student_id = %s", (student_id,))
+        rows = cursor.fetchall()
+        
+        # Map: exam_id -> { attempted: bool, is_retest: bool }
+        status_map = {}
+        for row in rows:
+            is_completed = row['submitted_at'] is not None
+            # If submitted_at is NULL, it might be in-progress OR a retest reset.
+            # If is_retest=1 and submitted_at is NULL, it's a "Retest Available" state.
+            
+            status_map[row['exam_id']] = {
+                'attempted': is_completed,
+                'is_retest': bool(row.get('is_retest'))
+            }
+            
+        return jsonify({'exam_statuses': status_map}), 200
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
+# ✅ Save camera evidence image during exam
+@app.route('/api/exams/<int:exam_id>/evidence', methods=['POST'])
+def save_exam_evidence(exam_id):
+    try:
+        data = request.get_json()
+        student_id = data.get('student_id')
+        image_data = data.get('image')  # base64 string
+        violation_type = data.get('violation_type', 'periodic_capture')
+
+        print(f"--- DEBUG: Evidence received for exam {exam_id}, student {student_id}, type: {violation_type}")
+
+        if not student_id or not image_data:
+            print(f"--- DEBUG: Missing data. student_id={student_id}, image_data_present={bool(image_data)}")
+            return jsonify({'error': 'Missing student_id or image'}), 400
+
+        # Decode base64 image
+        # Remove the data URL prefix if present (e.g. "data:image/jpeg;base64,...")
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]
+
+        image_bytes = base64.b64decode(image_data)
+        print(f"--- DEBUG: Decoded image size: {len(image_bytes)} bytes")
+
+        # Save to uploads/evidence/
+        evidence_dir = os.path.join(os.path.dirname(__file__), 'uploads', 'evidence')
+        os.makedirs(evidence_dir, exist_ok=True)
+
+        filename = f"exam{exam_id}_student{student_id}_{uuid.uuid4().hex[:8]}.jpg"
+        filepath = os.path.join(evidence_dir, filename)
+
+        with open(filepath, 'wb') as f:
+            f.write(image_bytes)
+        print(f"--- DEBUG: Image saved to {filepath}")
+
+        deepface_result = analyze_evidence_with_deepface(filepath)
+        stored_violation_type = violation_type
+        if violation_type in ('periodic_capture', 'pre_start_check') and deepface_result.get('violation_type'):
+            stored_violation_type = f"deepface_{deepface_result['violation_type']}"
+
+        # Save record to DB
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO exam_evidence (exam_id, student_id, image_path, violation_type)
+            VALUES (%s, %s, %s, %s)
+        """, (exam_id, student_id, f'uploads/evidence/{filename}', stored_violation_type))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print(f"--- DEBUG: Evidence record saved to DB")
+
+        return jsonify({
+            'message': 'Evidence saved',
+            'filename': filename,
+            'violation_type': stored_violation_type,
+            'deepface': deepface_result
+        }), 201
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 @app.route("/api/exams", methods=["GET"])
 def get_exams():
     try:
+        course_filter = request.args.get('course')
         conn = connect_db()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, title, description, start_time, duration_minutes FROM exams")
+        
+        query = "SELECT id, title, description, start_time, duration_minutes, course, exam_password, security_enabled FROM exams"
+        params = ()
+        
+        if course_filter:
+            query += " WHERE course = %s"
+            params = (course_filter,)
+            
+        cur.execute(query, params)
         exams = cur.fetchall()
+        
+        is_admin_req = request.args.get('admin', 'false').lower() == 'true'
+
+        # Add has_password flag and remove actual password from response unless admin
+        # Also convert start_time to ISO string without timezone to prevent UTC conversion
+        for exam in exams:
+            exam['has_password'] = bool(exam.get('exam_password'))
+            if not is_admin_req:
+                exam.pop('exam_password', None)
+            else:
+                # If admin, ensure None becomes empty string or keep as is
+                if exam.get('exam_password') is None:
+                    exam['exam_password'] = ''
+            # Convert datetime to ISO string (local time, no timezone suffix)
+            if exam.get('start_time'):
+                exam['start_time'] = exam['start_time'].strftime('%Y-%m-%dT%H:%M:%S')
+        
         conn.close()
         return jsonify(exams), 200
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+# ✅ Verify exam password
+@app.route('/api/exams/<int:exam_id>/verify-password', methods=['POST'])
+def verify_exam_password(exam_id):
+    data = request.get_json()
+    password = data.get('password', '')
+    
+    conn = connect_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT exam_password FROM exams WHERE id = %s", (exam_id,))
+        exam = cursor.fetchone()
+        if not exam:
+            return jsonify({'error': 'Exam not found'}), 404
+        
+        # If no password set, allow access
+        if not exam['exam_password']:
+            return jsonify({'verified': True}), 200
+        
+        # Check password match
+        if password == exam['exam_password']:
+            return jsonify({'verified': True}), 200
+        else:
+            return jsonify({'verified': False, 'message': 'Incorrect exam password'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
     
 
@@ -520,16 +861,16 @@ def get_exams():
 def export_data():
     conn = connect_db()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT id, username, email, fullname, phone FROM students")
+    cursor.execute("SELECT id, username, email, fullname, phone, course FROM students")
     students = cursor.fetchall()
     cursor.close()
     conn.close()
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['ID', 'Username', 'Email', 'Full Name', 'Phone'])
+    writer.writerow(['ID', 'Username', 'Email', 'Full Name', 'Phone', 'Course'])
     for s in students:
-        writer.writerow([s['id'], s['username'], s['email'], s['fullname'], s['phone']])
+        writer.writerow([s['id'], s['username'], s['email'], s['fullname'], s['phone'], s.get('course', '')])
     output.seek(0)
 
     return send_file(
@@ -659,18 +1000,33 @@ def update_student(id):
         cursor.close()
         conn.close()
 
-# ✅ Get Student Stats
+# ✅ Get Student Stats (Course-wise)
 @app.route('/api/student/<int:id>/stats', methods=['GET'])
 def get_student_stats(id):
     conn = connect_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        # Tests Given
-        cursor.execute("SELECT COUNT(*) as count FROM exam_attempts WHERE student_id = %s", (id,))
+        # Get student's course
+        cursor.execute("SELECT course FROM students WHERE id = %s", (id,))
+        student = cursor.fetchone()
+        student_course = student['course'] if student else None
+
+        # Tests Given (only for student's course)
+        if student_course:
+            cursor.execute("""
+                SELECT COUNT(*) as count FROM exam_attempts ea
+                JOIN exams e ON ea.exam_id = e.id
+                WHERE ea.student_id = %s AND e.course = %s
+            """, (id, student_course))
+        else:
+            cursor.execute("SELECT COUNT(*) as count FROM exam_attempts WHERE student_id = %s", (id,))
         tests_given = cursor.fetchone()['count']
 
-        # Total Tests Available
-        cursor.execute("SELECT COUNT(*) as count FROM exams")
+        # Total Tests Available (only for student's course)
+        if student_course:
+            cursor.execute("SELECT COUNT(*) as count FROM exams WHERE course = %s", (student_course,))
+        else:
+            cursor.execute("SELECT COUNT(*) as count FROM exams")
         total_tests = cursor.fetchone()['count']
 
         # Tests Left (Total - Given)
@@ -693,30 +1049,56 @@ def get_student_matrix(id):
     conn = connect_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        # Get all exams and left join with attempts for this student
-        query = """
-            SELECT 
-                e.title, 
-                a.score, 
-                a.submitted_at 
-            FROM exams e 
-            LEFT JOIN exam_attempts a ON e.id = a.exam_id AND a.student_id = %s
-        """
-        cursor.execute(query, (id,))
+        # Get student's course first
+        cursor.execute("SELECT course FROM students WHERE id = %s", (id,))
+        student = cursor.fetchone()
+        student_course = student['course'] if student else None
+
+        # Only show exams assigned to the student's course
+        if student_course:
+            query = """
+                SELECT 
+                    e.id as exam_id,
+                    e.title, 
+                    a.score, 
+                    a.submitted_at,
+                    (SELECT COUNT(*) FROM questions q WHERE q.exam_id = e.id) as total_questions
+                FROM exams e 
+                LEFT JOIN exam_attempts a ON e.id = a.exam_id AND a.student_id = %s
+                WHERE e.course = %s
+            """
+            cursor.execute(query, (id, student_course))
+        else:
+            query = """
+                SELECT 
+                    e.id as exam_id,
+                    e.title, 
+                    a.score, 
+                    a.submitted_at,
+                    (SELECT COUNT(*) FROM questions q WHERE q.exam_id = e.id) as total_questions
+                FROM exams e 
+                LEFT JOIN exam_attempts a ON e.id = a.exam_id AND a.student_id = %s
+            """
+            cursor.execute(query, (id,))
+
         results = cursor.fetchall()
         
         matrix_data = []
         for row in results:
+            score = row['score'] if row['score'] is not None else 0
+            total_q = row['total_questions'] if row['total_questions'] else 0
             status = 'Completed' if row['submitted_at'] else 'Not Started'
-            # Calculate mastering (arbitrary threshold > 80% or just based on score if we knew total)
-            # Since we don't have total questions easily here without another join or storing it, 
-            # we'll assume a high raw score is mastered or just pass the score.
-            # Simplified: Mastered if score >= 8 (assuming 10 q test) or just distinct logic
+            
+            # Calculate percentage
+            percentage = round((score / total_q) * 100) if total_q > 0 and score > 0 else 0
             
             matrix_data.append({
+                'exam_id': row['exam_id'],
                 'subject': row['title'],
                 'status': status,
-                'score': row['score'] if row['score'] is not None else 0
+                'score': score,
+                'total_questions': total_q,
+                'percentage': percentage
             })
 
         return jsonify(matrix_data), 200
@@ -725,6 +1107,102 @@ def get_student_matrix(id):
     finally:
         cursor.close()
         conn.close()
+
+# ✅ Create Backup (JSON dump)
+@app.route('/api/admin/backup', methods=['GET'])
+def create_backup():
+    try:
+        conn = connect_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        backup_data = {}
+        
+        # Students
+        cursor.execute("SELECT * FROM students")
+        backup_data['students'] = cursor.fetchall()
+        
+        # Exams
+        cursor.execute("SELECT * FROM exams")
+        backup_data['exams'] = cursor.fetchall() # Date/Time objects might need serialization help
+        
+        # Questions
+        cursor.execute("SELECT * FROM questions")
+        backup_data['questions'] = cursor.fetchall()
+        
+        # Attempts
+        cursor.execute("SELECT * FROM exam_attempts")
+        backup_data['exam_attempts'] = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        # Custom serializer for datetime objects
+        def default(o):
+            if isinstance(o, (datetime.date, datetime.datetime)):
+                return o.isoformat()
+            return str(o)
+            
+        json_output = json.dumps(backup_data, default=default, indent=4)
+        
+        return send_file(
+            io.BytesIO(json_output.encode()),
+            mimetype='application/json',
+            as_attachment=True,
+            download_name=f'backup_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        )
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+# ✅ Export Exam Results (Report)
+@app.route('/api/admin/export-results', methods=['GET'])
+def export_results():
+    try:
+        conn = connect_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        query = """
+            SELECT 
+                s.fullname, s.email, s.course,
+                e.title as exam_title, 
+                a.score, 
+                a.started_at, a.submitted_at
+            FROM exam_attempts a
+            JOIN students s ON a.student_id = s.id
+            JOIN exams e ON a.exam_id = e.id
+            ORDER BY a.submitted_at DESC
+        """
+        cursor.execute(query)
+        results = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Student Name', 'Email', 'Course', 'Exam Title', 'Score', 'Started At', 'Submitted At'])
+        
+        for r in results:
+            writer.writerow([
+                r['fullname'], 
+                r['email'], 
+                r.get('course', ''),
+                r['exam_title'], 
+                r['score'], 
+                r['started_at'], 
+                r['submitted_at']
+            ])
+            
+        output.seek(0)
+
+        return send_file(
+            io.BytesIO(output.getvalue().encode()),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name='exam_results_report.csv'
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

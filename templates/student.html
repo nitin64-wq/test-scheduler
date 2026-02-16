@@ -8,103 +8,130 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='footer.css') }}">
   <!-- <link rel="stylesheet" href="{{ url_for('static', filename='styles1.css') }}"> -->
   <link rel="stylesheet" href="/static/style1.css">
+  <link rel="stylesheet" href="/static/student-sidebar.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body>
-  <header class="dashboard-header">
-    <h2>🎓 Welcome back, <span id="studentName"></span></h2>
-    <button onclick="logout()" class="logout-btn">Logout</button>
-  </header>
+  <div class="student-layout">
+    <!-- Sidebar -->
+    <aside class="student-sidebar">
+      <div class="sidebar-header">
+        <h2><i class="fas fa-user-graduate"></i> Student</h2>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="#" class="nav-link active" data-target="overview-section"><i class="fas fa-home"></i> Overview</a>
+        <a href="#" class="nav-link" data-target="profile-section"><i class="fas fa-user"></i> Profile</a>
+        <a href="#" class="nav-link" data-target="progress-section"><i class="fas fa-chart-line"></i> Progress &
+          Matrix</a>
+        <a href="#" class="nav-link" data-target="exams-section"><i class="fas fa-file-alt"></i> Exams</a>
+      </nav>
+      <div class="sidebar-footer">
+        <button onclick="logout()" class="logout-btn-sidebar"><i class="fas fa-sign-out-alt"></i> Logout</button>
+      </div>
+    </aside>
 
-  <div class="dashboard-container">
-    <section class="quick-stats">
-      <h3>Your Study Overview</h3>
-      <div class="stats-grid">
-        <div class="stat-card">
-          <span id="testsGivenCount">0</span>
-          <p>Tests Given</p>
+    <main class="student-main">
+      <header class="dashboard-header">
+        <h2>🎓 Welcome back, <span id="studentName"></span> <span id="studentCourseBadge"
+            style="font-size: 0.6em; background: #3498db; color: white; padding: 2px 8px; border-radius: 4px; vertical-align: middle;"></span>
+        </h2>
+        <button onclick="logout()" class="logout-btn" style="display:none;">Logout</button>
+        <!-- Hidden in header for desktop -->
+      </header>
+
+      <div class="dashboard-container">
+        <section id="overview-section" class="quick-stats">
+          <h3>Your Study Overview</h3>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span id="testsGivenCount">0</span>
+              <p>Tests Given</p>
+            </div>
+            <div class="stat-card">
+              <span id="testsLeftCount">0</span>
+              <p>Tests Left</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Profile Section -->
+        <section id="profile-section" class="profile-section" style="display:none;">
+          <h3>👤 My Profile</h3>
+          <div class="card" style="max-width: 600px; margin: 20px auto; padding: 30px;">
+            <div style="margin-bottom: 20px;">
+              <label style="display:block; font-weight:bold; margin-bottom:5px;">Full Name</label>
+              <input type="text" id="profileName" readonly
+                style="width:100%; padding:10px; border:1px solid #ddd; background:#f9f9f9; border-radius:4px;">
+            </div>
+            <div style="margin-bottom: 20px;">
+              <label style="display:block; font-weight:bold; margin-bottom:5px;">Username</label>
+              <input type="text" id="profileUsername" readonly
+                style="width:100%; padding:10px; border:1px solid #ddd; background:#f9f9f9; border-radius:4px;">
+            </div>
+            <div style="margin-bottom: 20px;">
+              <label style="display:block; font-weight:bold; margin-bottom:5px;">Email</label>
+              <input type="text" id="profileEmail" readonly
+                style="width:100%; padding:10px; border:1px solid #ddd; background:#f9f9f9; border-radius:4px;">
+            </div>
+            <div style="margin-bottom: 20px;">
+              <label style="display:block; font-weight:bold; margin-bottom:5px;">Phone</label>
+              <input type="text" id="profilePhone" readonly
+                style="width:100%; padding:10px; border:1px solid #ddd; background:#f9f9f9; border-radius:4px;">
+            </div>
+            <div style="margin-bottom: 20px;">
+              <label style="display:block; font-weight:bold; margin-bottom:5px;">Course</label>
+              <input type="text" id="profileCourse" readonly
+                style="width:100%; padding:10px; border:1px solid #ddd; background:#f9f9f9; border-radius:4px;">
+            </div>
+          </div>
+        </section>
+
+        <!-- Progress Tracker -->
+        <!-- Progress & Matrix Combined -->
+        <section id="progress-section" class="progress-section">
+          <h3>📈 Your Progress</h3>
+          <div class="progress-bar" style="margin-bottom: 30px;">
+            <div class="progress-fill" id="progressFill" style="width: 0%;">0%</div>
+          </div>
+
+          <h2>📊 Learning Progress Matrix</h2>
+          <div class="matrix-container">
+            <div class="matrix-header">
+              <div class="matrix-cell">Subject</div>
+              <div class="matrix-cell">Not Started</div>
+              <div class="matrix-cell">In Progress</div>
+              <div class="matrix-cell">Completed</div>
+              <div class="matrix-cell">Mastered</div>
+            </div>
+            <div id="matrixRows">
+              <!-- Rows will be dynamically injected here -->
+            </div>
+          </div>
+        </section>
+
+
+        <div id="exams-section" class="quiz-section">
+          <h2>Available Exams</h2>
+          <div id="examList" class="quiz-list"></div>
         </div>
-        <div class="stat-card">
-          <span id="testsLeftCount">0</span>
-          <p>Tests Left</p>
-        </div>
-      </div>
-  </div>
-  </div>
 
-  <!-- <div class="stats-grid"> -->
-  <!-- <div class="stat-card"> -->
-  <!-- <span id="upcomingTestsCount">0</span> -->
-  <!-- <p>Upcoming Tests</p> -->
-  <!-- </div> -->
-  <!-- <div class="stat-card"> -->
-  <!-- <span id="completedTopics">0</span> -->
-  <!-- <p>Topics Completed</p> -->
-  <!-- </div> -->
-
-  <!-- Progress Tracker -->
-  <section class="progress-section">
-    <h3>📈 Your Progress</h3>
-    <div class="progress-bar">
-      <div class="progress-fill" style="width: 60%;">60%</div>
-    </div>
-  </section>
-
-  <!-- Practice Quizzes -->
-  <!-- <section class="quiz-section"> -->
-  <!-- <h2>📘 Practice Quizzes</h2> -->
-  <!-- <div class="quiz-list" id="quizList"> -->
-  <!-- Quiz cards will appear here -->
-  <!-- </div> -->
-  <!-- </section> -->
-
-  <!-- Performance Matrix 
-<section class="performance-section">
-  <h2>📊 Performance Matrix</h2>
-  <canvas id="performanceChart"></canvas>
-</section>-->
-
-  <!-- <div class="progress-fill" id="progressFill">0%</div> -->
-
-  <section class="progress-matrix">
-    <h2>📊 Learning Progress Matrix</h2>
-    <div class="matrix-container">
-      <div class="matrix-header">
-        <div class="matrix-cell">Subject</div>
-        <div class="matrix-cell">Not Started</div>
-        <div class="matrix-cell">In Progress</div>
-        <div class="matrix-cell">Completed</div>
-        <div class="matrix-cell">Mastered</div>
-      </div>
-      <div id="matrixRows">
-        <!-- Rows will be dynamically injected here -->
-      </div>
+      </div> <!-- End dashboard-container -->
 
 
-    </div>
-  </section>
-
-
-  <div class="quiz-section">
-    <h2>Available Exams</h2>
-    <div id="examList" class="quiz-list"></div>
-  </div>
-
-
-  </section>
-  <!-- 
+      <!-- 
   <div class="action-buttons">
     <a href="/" class="primary-btn">Go to Test Planner</a> -->
-  <!--<button class="secondary-btn" onclick="showStudyTips()">Study Tips</button>-->
-  <!-- </div>
+      <!--<button class="secondary-btn" onclick="showStudyTips()">Study Tips</button>-->
+      <!-- </div>
   </div> -->
 
-  <!-- <section class="calendar-section">
+      <!-- <section class="calendar-section">
     <h2>📅 Test Calendar</h2>
     <div id="calendarView"></div>
   </section> -->
 
-  <!-- <section class="notes-section">
+      <!-- <section class="notes-section">
     <h2><i class="fas fa-sticky-note"></i> Smart Notes with Reminders</h2>
     <textarea id="notesArea" rows="6" placeholder="Write your notes here..."></textarea>
     <div class="notes-actions">
@@ -121,7 +148,7 @@
       </div>
     </div>
     <div id="noteRemindersList"></div> -->
-  <!-- </section>
+      <!-- </section>
 
   Advanced Calendar Section 
   <section class="calendar-section">
@@ -136,27 +163,30 @@
     </div>
     <div id="monthView"></div>
   </section> -->
-  <!-- Calendar header (weekday names) -->
+      <!-- Calendar header (weekday names) -->
 
 
 
-  <!-- Google API must load first -->
-  <!-- <script src="https://apis.google.com/js/api.js" onload="initGoogleAPI()"></script> -->
-  <script src="/static/script.js"></script>
-  <!-- <script src="{{ url_for('static', filename='script.js') }}"></script> -->
+      <!-- Google API must load first -->
+      <!-- <script src="https://apis.google.com/js/api.js" onload="initGoogleAPI()"></script> -->
+      <script src="/static/script.js"></script>
+      <!-- <script src="{{ url_for('static', filename='script.js') }}"></script> -->
 
 
-  <script>
-    function logout() {
-      // Clear both localStorage and sessionStorage
-      localStorage.removeItem('user');
-      localStorage.removeItem('studentData');
-      sessionStorage.removeItem('authUser');
+      <script>
+        function logout() {
+          // Clear both localStorage and sessionStorage
+          localStorage.removeItem('user');
+          localStorage.removeItem('studentData');
+          sessionStorage.removeItem('authUser');
 
-      // Redirect to login
-      window.location.href = '/login';
-    }
-  </script>
+          // Redirect to login
+          window.location.href = '/login';
+        }
+      </script>
+
+    </main>
+  </div>
 
   <link rel="stylesheet" href="/static/footer.css"> <!-- always after -->
 </body>

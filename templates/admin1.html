@@ -4,158 +4,283 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin Dashboard - Monday Test Planner</title>
+  <title>Admin Dashboard - NTP</title>
 
   <!-- CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='styles3.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin-sidebar.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='footer.css') }}">
 
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
-  <div class="admin-container" role="main">
-    <header class="admin-header">
-      <h1 role="heading" aria-level="1">
-        <i class="fas fa-user-shield" aria-hidden="true"></i>
-        Admin Dashboard
-      </h1>
-      <button id="logoutBtn" class="logout-btn" aria-label="Logout">
-        <i class="fas fa-sign-out-alt"></i> Logout
-      </button>
-    </header>
-
-    <!-- Admin authorization warning -->
-    <div id="adminWarning" class="alert" role="alert" hidden>
-      <i class="fas fa-exclamation-triangle"></i>
-      You must have admin privileges to view this page
-    </div>
-
-    <!-- Student Management -->
-    <section class="admin-card">
-      <h2 id="studentTableHeading">
-        <i class="fas fa-users"></i> Student Management
-      </h2>
-      <div role="region" aria-labelledby="studentTableHeading">
-        <table class="data-table" aria-describedby="studentTableDesc">
-          <caption id="studentTableDesc" class="sr-only">List of registered students</caption>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Phone</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="studentTable">
-            <!-- Rows will be injected dynamically -->
-          </tbody>
-        </table>
+  <div class="admin-layout">
+    <!-- Sidebar -->
+    <aside class="admin-sidebar">
+      <div class="sidebar-header">
+        <h2><i class="fas fa-user-shield"></i> NTP Admin</h2>
       </div>
-    </section>
-
-    <!-- Pagination -->
-    <div class="pagination">
-      <button id="prevPage" onclick="changePage(-1)">Previous</button>
-      <span id="pageInfo">Page 1</span>
-      <button id="nextPage" onclick="changePage(1)">Next</button>
-    </div>
-
-    <!-- Exam Creation -->
-    <section class="exam-section admin-card">
-      <h2><i class="fas fa-clipboard-list"></i> Create New Exam</h2>
-      <form id="createExamForm">
-        <label for="examTitle">Exam Title</label>
-        <input type="text" id="examTitle" placeholder="Enter exam title" required>
-
-        <label for="examDesc">Description</label>
-        <textarea id="examDesc" placeholder="Enter short description"></textarea>
-
-        <label for="examStartTime">Start Time</label>
-        <input type="datetime-local" id="examStartTime" required>
-
-        <label for="examDuration">Duration (minutes)</label>
-        <input type="number" id="examDuration" placeholder="e.g. 60" required>
-
-        <label for="examFile">Upload Exam Questions (Excel)</label>
-        <input type="file" id="examFile" accept=".xlsx" required>
-
-        <button type="submit"><i class="fas fa-plus-circle"></i> Create Exam</button>
-      </form>
-    </section>
-
-
-    <!-- Student Activity -->
-    <section class="admin-card">
-      <h2><i class="fas fa-user-check"></i> Student Activity</h2>
-      <div id="studentActivity"></div>
-      <button onclick="exportData()">Export Data</button>
-    </section>
-
-    <!-- System Analytics -->
-    <section class="admin-card">
-      <h2><i class="fas fa-chart-line"></i> System Analytics</h2>
-      <div class="dashboard">
-        <div class="card" id="total">Total Students: 0</div>
-        <div class="card" id="active">Active Students: 0</div>
-        <div class="card" id="today">Active Today: 0</div>
-        <div class="card" id="tests">Scheduled Tests: 0</div>
-        <div class="card" id="average">Avg. Students/Test: 0</div>
+      <nav class="sidebar-nav">
+        <a href="#" class="nav-link active" data-target="student-management"><i class="fas fa-users"></i> Students</a>
+        <a href="#" class="nav-link" data-target="create-exam"><i class="fas fa-plus-circle"></i> Create Exam</a>
+        <a href="#" class="nav-link" data-target="created-exams"><i class="fas fa-list-alt"></i> Exam List</a>
+        <a href="#" class="nav-link" data-target="manage-results"><i class="fas fa-poll"></i> Results & Retests</a>
+        <a href="#" class="nav-link" data-target="student-activity"><i class="fas fa-user-check"></i> Activity</a>
+        <a href="#" class="nav-link" data-target="system-analytics"><i class="fas fa-chart-line"></i> Analytics</a>
+        <a href="#" class="nav-link" data-target="system-control"><i class="fas fa-cogs"></i> System</a>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="logoutBtn" class="logout-btn-sidebar"><i class="fas fa-sign-out-alt"></i> Logout</button>
       </div>
-    </section>
+    </aside>
 
-    <!-- System Control -->
-    <section class="admin-card">
-      <h2><i class="fas fa-tools"></i> System Control</h2>
-      <div class="dashboard">
-        <div class="card">
-          <h3>Data Management</h3>
-          <button>Export Students Data</button>
-          <button>Create Backup</button>
+    <!-- Main Content -->
+    <main class="admin-main">
+      <header class="admin-header">
+        <h1>Dashboard Overview</h1>
+        <div class="user-info">
+          <span>Welcome, Admin</span>
         </div>
-        <div class="card">
-          <h3>System Maintenance</h3>
-          <button class="danger" onclick="openModal('clearParams')">Clear All Tests</button>
-          <button class="danger" onclick="openModal('resetSystem')">Reset System</button>
+      </header>
+
+      <!-- Admin authorization warning -->
+      <div id="adminWarning" class="alert" role="alert" hidden>
+        <i class="fas fa-exclamation-triangle"></i>
+        You must have admin privileges to view this page
+      </div>
+
+      <!-- Student Management -->
+      <section id="student-management" class="admin-card">
+        <h2 id="studentTableHeading">
+          <i class="fas fa-users"></i> Student Management
+        </h2>
+        <div role="region" aria-labelledby="studentTableHeading">
+          <table class="data-table" aria-describedby="studentTableDesc">
+            <caption id="studentTableDesc" class="sr-only">List of registered students</caption>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Course</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="studentTable">
+              <!-- Rows will be injected dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination">
+          <button id="prevPage" onclick="changePage(-1)">Previous</button>
+          <span id="pageInfo">Page 1</span>
+          <button id="nextPage" onclick="changePage(1)">Next</button>
+        </div>
+      </section>
+
+      <!-- Exam Creation -->
+      <section id="create-exam" class="exam-section admin-card">
+        <h2><i class="fas fa-clipboard-list"></i> Create New Exam</h2>
+        <form id="createExamForm">
+          <label for="examTitle">Exam Title</label>
+          <input type="text" id="examTitle" placeholder="Enter exam title" required>
+
+          <label for="examDesc">Description</label>
+          <textarea id="examDesc" placeholder="Enter short description"></textarea>
+
+          <label for="examStartTime">Start Time</label>
+          <input type="datetime-local" id="examStartTime" required>
+
+          <label for="examDuration">Duration (minutes)</label>
+          <input type="number" id="examDuration" placeholder="e.g. 60" required>
+
+          <label for="examCourse">Course (Department)</label>
+          <select id="examCourse" required>
+            <option value="" disabled selected>Select Course</option>
+            <option value="Cyber Security">Cyber Security</option>
+            <option value="Web Development">Web Development</option>
+            <option value="AI/ML">AI/ML</option>
+            <option value="Data Science">Data Science</option>
+            <option value="Data Analytics">Data Analytic</option>
+            <option value="Android Development">Android Development</option>
+            <option value="UI/UX">UI/UX</option>
+            <option value="Cloud Computing">Cloud Computing</option>
+          </select>
+
+          <label for="examPassword">Exam Password (optional)</label>
+          <input type="text" id="examPassword" placeholder="Set a password for this exam (optional)">
+
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin-top: 10px;">
+            <input type="checkbox" id="securityEnabled" checked style="width: auto; margin: 0;">
+            Enable Security Features (Tab Switching Detection, No Right Click)
+          </label>
+
+          <label for="examFile">Upload Exam Questions (Excel)</label>
+          <input type="file" id="examFile" accept=".xlsx,.docx,.txt" required>
+
+          <button type="submit"><i class="fas fa-plus-circle"></i> Create Exam</button>
+        </form>
+      </section>
+
+      <!-- Created Exams List -->
+      <section id="created-exams" class="admin-card">
+        <h2><i class="fas fa-list-alt"></i> Created Exams</h2>
+        <div role="region" aria-label="Created Exams List">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Course</th>
+                <th>Description</th>
+                <th>Start Time</th>
+                <th>Duration</th>
+                <th>Password</th>
+                <th>Security</th>
+              </tr>
+            </thead>
+            <tbody id="examsTable">
+              <!-- Rows will be injected dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Manage Results & Retests -->
+      <section id="manage-results" class="admin-card">
+        <h2><i class="fas fa-undo"></i> Manage Results & Retests</h2>
+        <div style="margin-bottom: 20px;">
+          <button onclick="loadAttempts()">Refresh Results</button>
+
+          <label style="margin-left: 15px; font-weight: bold;">Filter by Course:</label>
+          <select id="filterResultsCourse" style="padding: 5px; margin-left: 5px;" onchange="filterAttempts()">
+            <option value="All">All Courses</option>
+            <option value="Cyber Security">Cyber Security</option>
+            <option value="Web Development">Web Development</option>
+            <option value="AI/ML">AI/ML</option>
+            <option value="Data Science">Data Science</option>
+            <option value="Data Analytics">Data Analytics</option>
+            <option value="Android Development">Android Development</option>
+            <option value="UI/UX">UI/UX</option>
+            <option value="Cloud Computing">Cloud Computing</option>
+          </select>
+        </div>
+        <div role="region" aria-label="Exam Attempts List">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Course</th>
+                <th>Exam</th>
+                <th>Score</th>
+                <th>Submitted At</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="attemptsTable">
+              <!-- Rows injected dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Student Activity -->
+      <section id="student-activity" class="admin-card">
+        <h2><i class="fas fa-user-check"></i> Student Activity</h2>
+        <div id="studentActivity"></div>
+        <button onclick="exportData()">Export Data</button>
+      </section>
+
+      <!-- System Analytics -->
+      <section id="system-analytics" class="admin-card">
+        <h2><i class="fas fa-chart-line"></i> System Analytics</h2>
+        <div class="dashboard">
+          <div class="card" id="total">Total Students: 0</div>
+          <div class="card" id="active">Active Students: 0</div>
+          <div class="card" id="today">Active Today: 0</div>
+          <div class="card" id="tests">Scheduled Tests: 0</div>
+          <div class="card" id="average">Avg. Students/Test: 0</div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-container" style="display: flex; gap: 20px; flex-wrap: wrap; margin-top: 30px;">
+          <div class="chart-box"
+            style="flex: 1; min-width: 300px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+            <h3 style="text-align: center; margin-bottom: 15px; color: #34495e;">Students by Course</h3>
+            <canvas id="studentCourseChart"></canvas>
+          </div>
+          <div class="chart-box"
+            style="flex: 2; min-width: 400px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+            <h3 style="text-align: center; margin-bottom: 15px; color: #34495e;">Test Performance Overview</h3>
+            <canvas id="studentPerformanceChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- System Control -->
+      <section id="system-control" class="admin-card">
+        <h2><i class="fas fa-tools"></i> System Control</h2>
+        <div class="dashboard">
+          <div class="card">
+            <h3>Data Management</h3>
+            <button onclick="exportData()">Export Students Data</button>
+            <button onclick="exportResults()">Export Exam Report</button>
+            <button onclick="createBackup()">Create Backup</button>
+          </div>
+          <div class="card">
+            <h3>System Maintenance</h3>
+            <button class="danger" onclick="performSystemAction('clearParams')">Clear All Tests</button>
+            <button class="danger" onclick="performSystemAction('resetSystem')">Reset System</button>
+          </div>
+        </div>
+      </section>
+      <!-- Student History Modal -->
+      <div id="studentHistoryModal" class="modal"
+        style="display:none; position:fixed; z-index:100; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.4);">
+        <div class="modal-content"
+          style="background-color:#fefefe; margin:10% auto; padding:20px; border:1px solid #888; width:70%; max-width:800px; border-radius:8px;">
+          <button onclick="closeHistoryModal()"
+            style="float:right; font-size:20px; background:none; border:none; cursor:pointer;">&times;</button>
+          <h2><i class="fas fa-history"></i> Student Exam History</h2>
+          <h3 id="historyStudentName" style="color:#2c3e50; border-bottom:1px solid #eee; padding-bottom:10px;">Student
+            Name</h3>
+
+          <div style="overflow-x:auto; margin-top:20px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Exam Title</th>
+                  <th>Status</th>
+                  <th>Score</th>
+                  <th>Total Qs</th>
+                  <th>%</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="studentHistoryTableBody">
+                <!-- Rows injected via JS -->
+              </tbody>
+            </table>
+          </div>
+          <div style="text-align:right; margin-top:20px;">
+            <button onclick="closeHistoryModal()" class="action-btn" style="background:#95a5a6;">Close</button>
+          </div>
         </div>
       </div>
-    </section>
+
+    </main>
   </div>
 
-  <!-- Modal -->
-  <div class="modal" id="confirmModal">
-    <div class="modal-content">
-      <p>Are you sure you want to perform this action?</p>
-      <div class="modal-buttons">
-        <button onclick="confirmAction()">Confirm</button>
-        <button onclick="closeModal()">Cancel</button>
-      </div>
-    </div>
-  </div>
 
-  <!-- Progress Modal -->
-  <div class="modal" id="progressModal">
-    <div class="modal-content" style="max-width: 800px; width: 90%;">
-      <h3>Learning Progress: <span id="progressStudentName"></span></h3>
-      <!-- Matrix Header -->
-      <div class="matrix-container" style="margin-top:20px;">
-        <div class="matrix-header">
-          <div class="matrix-cell">Subject</div>
-          <div class="matrix-cell">Not Started</div>
-          <div class="matrix-cell">In Progress</div>
-          <div class="matrix-cell">Completed</div>
-          <div class="matrix-cell">Mastered</div>
-        </div>
-        <div id="adminMatrixContainer">
-          <!-- Rows injected here -->
-        </div>
-      </div>
-      <div class="modal-buttons">
-        <button onclick="closeProgressModal()">Close</button>
-      </div>
-    </div>
-  </div>
+
+
 
   <!-- JS -->
   <script src="{{ url_for('static', filename='admin1.js') }}"></script>

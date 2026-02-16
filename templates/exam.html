@@ -168,6 +168,67 @@
                 position: static;
             }
         }
+
+        /* Camera Preview Widget */
+        .camera-widget {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            background: #1a1a2e;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            z-index: 9999;
+            border: 2px solid #e94560;
+        }
+
+        .camera-widget .camera-header {
+            background: linear-gradient(135deg, #e94560, #0f3460);
+            padding: 6px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: white;
+            font-weight: 600;
+        }
+
+        .camera-widget .camera-header .rec-dot {
+            width: 8px;
+            height: 8px;
+            background: #ff4444;
+            border-radius: 50%;
+            animation: recBlink 1s infinite;
+            margin-right: 5px;
+            display: inline-block;
+        }
+
+        @keyframes recBlink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.2;
+            }
+        }
+
+        .camera-widget video {
+            width: 100%;
+            display: block;
+            background: #000;
+        }
+
+        .camera-widget .camera-status {
+            padding: 4px 10px;
+            font-size: 0.65rem;
+            color: #aaa;
+            text-align: center;
+            background: #16213e;
+        }
     </style>
 </head>
 
@@ -231,16 +292,15 @@
     <div class="instructions-container" id="instructions-view">
         <h2>📜 Exam Instructions & Rules</h2>
         <ul class="instructions-list">
-            <li><strong>1. Camera & Microphone:</strong> You must allow access to your camera and microphone. They will
-                be monitored throughout the exam.</li>
-            <li><strong>2. Fullscreen Mode:</strong> The exam effectively requires you to stay on this tab.</li>
-            <li><strong>3. No Tab Switching:</strong> Switching tabs or minimizing the browser is strictly prohibited.
+
+            <li><strong>1. Fullscreen Mode:</strong> The exam effectively requires you to stay on this tab.</li>
+            <li><strong>2. No Tab Switching:</strong> Switching tabs or minimizing the browser is strictly prohibited.
             </li>
-            <li><strong>4. Warning System:</strong> You will receive <strong>one usage warning</strong> for tab
+            <li><strong>3. Warning System:</strong> You will receive <strong>one usage warning</strong> for tab
                 switching. A second violation will result in <strong>auto-submission</strong>.</li>
-            <li><strong>5. Timer:</strong> Keep an eye on the timer. The exam submits automatically when time runs out.
+            <li><strong>4. Timer:</strong> Keep an eye on the timer. The exam submits automatically when time runs out.
             </li>
-            <li><strong>6. Integrity:</strong> Any attempt to cheat or use unfair means will be recorded.</li>
+            <li><strong>5. Integrity:</strong> Any attempt to cheat or use unfair means will be recorded.</li>
         </ul>
 
         <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
@@ -258,12 +318,7 @@
         <div class="exam-container">
             <h2 id="examTitle">Loading Exam...</h2>
 
-            <div id="camera-container" style="margin-bottom: 20px; text-align: center;">
-                <video id="webcam" autoplay playsinline width="320" height="240"
-                    style="border: 2px solid #ccc; border-radius: 8px; background: #000;"></video>
-                <div id="camera-status" style="margin-top: 5px; color: #666; font-size: 0.9em;">Camera & Mic access
-                    required</div>
-            </div>
+
 
             <p id="examDesc"></p>
 
@@ -291,6 +346,17 @@
             </div>
         </aside>
     </div>
+
+    <!-- Camera Preview Widget -->
+    <div class="camera-widget" id="cameraWidget" style="display: none;">
+        <div class="camera-header">
+            <span><span class="rec-dot"></span> PROCTORING</span>
+            <span>📷</span>
+        </div>
+        <video id="cameraPreview" autoplay muted playsinline></video>
+        <div class="camera-status" id="cameraStatus">Initializing camera...</div>
+    </div>
+    <canvas id="captureCanvas" style="display: none;"></canvas>
 
     <script src="/static/exam.js"></script>
 </body>

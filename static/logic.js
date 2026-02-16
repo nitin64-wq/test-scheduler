@@ -14,9 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Enhanced input validation
     const validateInputs = (username, password, role) => {
         const errors = [];
-        if (!username.trim()) errors.push('Username is required');
+        if (!username.trim()) errors.push('Username or Email is required');
         if (!password.trim()) errors.push('Password is required');
-        if (!role) errors.push('Role selection is required');
         if (password.length < 8) errors.push('Password must be at least 8 characters');
         return errors;
     };
@@ -37,7 +36,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const username = document.getElementById('username').value.trim();
         const password = document.getElementById('password').value.trim();
-        const role = document.getElementById('role').value;
+
+        // Auto-detect role
+        let role = 'student';
+        if (username === 'admin') {
+            role = 'admin';
+        }
 
         // Clear previous messages
         loginMessage.style.display = 'none';

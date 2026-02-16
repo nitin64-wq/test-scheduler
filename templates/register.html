@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Register | Monday Test Planner</title>
+  <title>Register | NTP</title>
   <!-- <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"> -->
   <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -12,7 +12,7 @@
 <body>
   <div id="ff">
     <div id="sr">
-      <h1>Monday Test Planner</h1>
+      <h1>NTP</h1>
       <h2>🧑‍🎓 Student Registration</h2>
     </div>
 
@@ -34,6 +34,19 @@
 
       <label for="regNumber">Phone Number</label>
       <input type="tel" id="regNumber" placeholder="Mobile number" required>
+
+      <label for="regCourse">Course</label>
+      <select id="regCourse" required>
+        <option value="" disabled selected>Select your course</option>
+        <option value="Cyber Security">Cyber Security</option>
+        <option value="Web Development">Web Development</option>
+        <option value="AI/ML">AI/ML</option>
+        <option value="Data Science">Data Science</option>
+        <option value="Data Analytics">Data Analytic</option>
+        <option value="Android Development">Android Development</option>
+        <option value="UI/UX">UI/UX</option>
+        <option value="Cloud Computing">Cloud Computing</option>
+      </select>
 
 
 

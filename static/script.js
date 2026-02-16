@@ -10,8 +10,21 @@ let currentYear = new Date().getFullYear();
 
 document.addEventListener("DOMContentLoaded", () => {
 
-  let studentName = "Student";
+  // Auth guard: redirect to login if no session
+  const authUser = sessionStorage.getItem('authUser');
   const studentData = JSON.parse(localStorage.getItem("studentData"));
+
+  if (!authUser || !studentData) {
+    // Clear any stale data
+    localStorage.removeItem('studentData');
+    localStorage.removeItem('user');
+    localStorage.removeItem('studentUsername');
+    sessionStorage.removeItem('authUser');
+    window.location.href = '/login';
+    return;
+  }
+
+  let studentName = "Student";
 
   if (studentData && studentData.fullname) {
     studentName = studentData.fullname;
@@ -23,18 +36,73 @@ document.addEventListener("DOMContentLoaded", () => {
   const studentNameEl = document.getElementById("studentName");
   if (studentNameEl) studentNameEl.textContent = studentName;
 
+  if (studentData && studentData.course) {
+    const badge = document.getElementById("studentCourseBadge");
+    if (badge) badge.textContent = studentData.course;
+  }
+
+  // Populate Profile
+  if (studentData) {
+    if (document.getElementById('profileName')) document.getElementById('profileName').value = studentData.fullname || '';
+    if (document.getElementById('profileUsername')) document.getElementById('profileUsername').value = studentData.username || '';
+    if (document.getElementById('profileEmail')) document.getElementById('profileEmail').value = studentData.email || '';
+    if (document.getElementById('profilePhone')) document.getElementById('profilePhone').value = studentData.phone || '';
+    if (document.getElementById('profileCourse')) document.getElementById('profileCourse').value = studentData.course || '';
+  }
+
   // Init UI sections
   updateProgressStats();
   updateProgressMatrix();
   renderTakeTestButton();
   loadExams(); // ✅ Show available exams on load
 
+  // Sidebar Navigation (Tab Switching)
+  const navLinks = document.querySelectorAll('.nav-link');
+  const sections = [
+    document.getElementById('overview-section'),
+    document.getElementById('profile-section'),
+    document.getElementById('progress-section'),
+    document.getElementById('exams-section')
+    // Add other sections as needed but currently these are the main ones
+  ];
+
+  // Helper to hide all main sections
+  function hideAllSections() {
+    sections.forEach(sec => {
+      if (sec) sec.style.display = 'none';
+    });
+  }
+
+  // Initial state: Show Overview
+  hideAllSections();
+  if (sections[0]) sections[0].style.display = 'block';
+
+  navLinks.forEach(link => {
+    link.addEventListener('click', function (e) {
+      e.preventDefault();
+
+      // Update active link state
+      navLinks.forEach(l => l.classList.remove('active'));
+      this.classList.add('active');
+
+      // Hide all sections
+      hideAllSections();
+
+      // Show target section
+      const targetId = this.getAttribute('data-target');
+      const targetSection = document.getElementById(targetId);
+      if (targetSection) {
+        targetSection.style.display = 'block';
+      }
+    });
+  });
+
   // Check reminders every minute
   setInterval(checkReminders, 60000);
 
   // Logout event
-  const logoutBtn = document.querySelector(".logout-btn");
-  if (logoutBtn) logoutBtn.addEventListener("click", logout);
+  const logoutBtns = document.querySelectorAll(".logout-btn, .logout-btn-sidebar");
+  logoutBtns.forEach(btn => btn.addEventListener("click", logout));
 });
 
 // ========================
@@ -220,16 +288,21 @@ async function updateProgressMatrix() {
 
     matrix.forEach((item) => {
       const isCompleted = item.status === 'Completed';
- 
+      const score = item.score || 0;
+      const total = item.total_questions || 0;
+      const percentage = item.percentage || 0;
+
+      // Mastery: >= 80% = Mastered, else just Completed
+      const isMastered = isCompleted && percentage >= 80;
 
       const div = document.createElement("div");
       div.classList.add("matrix-row");
       div.innerHTML = `
           <div class="matrix-cell subject" title="${item.subject}">${item.subject}</div>
-          <div class="matrix-cell not-started">${!isCompleted ? 1 : 0}</div>
-          <div class="matrix-cell in-progress">0</div>
-          <div class="matrix-cell completed">${isCompleted ? 1 : 0}</div>
-          <div class="matrix-cell mastered">${(isCompleted && item.score >= 8) ? 1 : 0}</div>
+          <div class="matrix-cell not-started">${!isCompleted ? '⬜' : ''}</div>
+          <div class="matrix-cell in-progress">${isCompleted && !isMastered ? '🟡' : ''}</div>
+          <div class="matrix-cell completed">${isCompleted ? score + '/' + total + ' (' + percentage + '%)' : '-'}</div>
+          <div class="matrix-cell mastered">${isMastered ? '🟢' : ''}</div>
         `;
       container.appendChild(div);
     });
@@ -255,7 +328,13 @@ function renderTakeTestButton() {
 
 async function loadExams() {
   try {
-    const res = await fetch("/api/exams");
+    const studentData = JSON.parse(localStorage.getItem("studentData"));
+    let url = "/api/exams";
+    if (studentData && studentData.course) {
+      url += `?course=${encodeURIComponent(studentData.course)}`;
+    }
+
+    const res = await fetch(url);
     const exams = await res.json();
     const examList = document.getElementById("examList");
     examList.innerHTML = "";
@@ -265,15 +344,83 @@ async function loadExams() {
       return;
     }
 
+    // Fetch attempted exam status map
+    let statusMap = {};
+    if (studentData && studentData.id) {
+      try {
+        const attemptRes = await fetch(`/api/exams/attempted-list?student_id=${studentData.id}`);
+        const attemptData = await attemptRes.json();
+        // Fallback for older API or new format
+        if (attemptData.exam_statuses) {
+          statusMap = attemptData.exam_statuses;
+        } else if (attemptData.attempted_exam_ids) {
+          // Old format fallback
+          attemptData.attempted_exam_ids.forEach(id => statusMap[id] = { attempted: true, is_retest: false });
+        }
+      } catch (e) {
+        console.error("Error fetching attempted exams:", e);
+      }
+    }
+
     exams.forEach((exam) => {
+      const status = statusMap[exam.id] || { attempted: false, is_retest: false };
+      const isAttempted = status.attempted;
+      // If it is a retest and NOT attempted (because we reset allowed), we show (Retest)
+      // Actually, if we reset, attempted becomes FALSE. But is_retest becomes TRUE.
+      const isRetest = status.is_retest;
+
+      const examStartTime = new Date(exam.start_time);
+      const examEndTime = new Date(examStartTime.getTime() + (exam.duration_minutes * 60 * 1000));
+      const now = new Date();
+      const isStarted = now >= examStartTime;
+      const isExpired = now >= examEndTime;
+      const hasPassword = exam.has_password;
+
       const card = document.createElement("div");
       card.className = "quiz-card";
+
+      let buttonHtml;
+      let statusHtml = "";
+
+      // Dynamic Title
+      let titleHtml = `<h3>${exam.title}`;
+      if (isRetest && !isAttempted) {
+        titleHtml += ` <span style="color:#e67e22; font-weight:bold;">(Retest)</span>`;
+      }
+      if (hasPassword) {
+        titleHtml += ` <span style="font-size:0.7em; color:#e67e22;">🔑 Password Protected</span>`;
+      }
+      titleHtml += `</h3>`;
+
+      if (isAttempted) {
+        // Already completed
+        buttonHtml = `<button disabled style="background: #6c757d; cursor: not-allowed; opacity: 0.8; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-size: 0.95rem;">✅ Already Completed</button>`;
+      } else if (isExpired && !isRetest) {
+        // Exam time has passed (unless it's a retest, which overrides expiry)
+        buttonHtml = `<button disabled style="background: #dc3545; cursor: not-allowed; opacity: 0.7; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-size: 0.95rem;">⏰ Exam Expired</button>`;
+      } else if (!isStarted) {
+        // Exam hasn't started yet — show countdown
+        const diff = examStartTime - now;
+        const hrs = Math.floor(diff / 3600000);
+        const mins = Math.floor((diff % 3600000) / 60000);
+        statusHtml = `<div style="background: #fff3cd; color: #856404; padding: 8px 12px; border-radius: 6px; margin: 8px 0; font-size: 0.85rem;">
+          ⏳ Exam starts in <strong>${hrs}h ${mins}m</strong> — Please wait
+        </div>`;
+        buttonHtml = `<button disabled style="background: #ffc107; cursor: not-allowed; color: #333; border: none; padding: 10px 20px; border-radius: 6px; font-size: 0.95rem;">🔒 Not Yet Available</button>`;
+      } else {
+        // Exam is available to take
+        const lockIcon = hasPassword ? '🔑 ' : '';
+        const retestBadge = isRetest ? '🔄 ' : '';
+        buttonHtml = `<button onclick="startExam(${exam.id}, ${hasPassword})" style="background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 0.95rem;">${retestBadge}${lockIcon}Take Exam</button>`;
+      }
+
       card.innerHTML = `
-        <h3>${exam.title}</h3>
+        ${titleHtml}
         <p>${exam.description || "No description"}</p>
-        <small>Start: ${new Date(exam.start_time).toLocaleString()}</small><br>
+        <small>Start: ${examStartTime.toLocaleString()}</small><br>
         <small>Duration: ${exam.duration_minutes || exam.duration} mins</small><br>
-        <button onclick="startExam(${exam.id})">Take Exam</button>
+        ${statusHtml}
+        ${buttonHtml}
       `;
       examList.appendChild(card);
     });
@@ -283,7 +430,7 @@ async function loadExams() {
 }
 
 
-function startExam(examId) {
-  alert("Starting exam with ID: " + examId);
+async function startExam(examId, hasPassword) {
+  // Password check is handled on the actual exam page now to avoid double entry.
   window.location.href = `/exam/${examId}`;
 }
