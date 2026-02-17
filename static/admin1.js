@@ -63,8 +63,83 @@ document.addEventListener('DOMContentLoaded', () => {
   loadStudentActivity();
   loadDashboardStats();
   loadCreatedExams();
+  loadCreatedExams();
+  loadCreatedExams();
   loadAttempts(); // Load results/attempts
+  loadChallenges(); // Load coding challenges
 });
+
+/* =========================
+   Custom Dialog Logic
+   ========================= */
+
+function showCustomDialog(type, message, defaultValue = '') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('customDialogModal');
+    const titleEl = document.getElementById('dialogTitle');
+    const msgEl = document.getElementById('dialogMessage');
+    const inputContainer = document.getElementById('dialogInputContainer');
+    const inputEl = document.querySelector('#dialogInputContainer input');
+    const okBtn = document.getElementById('dialogOkBtn');
+    const cancelBtn = document.getElementById('dialogCancelBtn');
+
+    // Reset State
+    inputEl.value = '';
+
+    // UI Setup
+    if (type === 'alert') {
+      titleEl.textContent = 'Alert';
+      cancelBtn.style.display = 'none';
+      inputContainer.style.display = 'none';
+    } else if (type === 'confirm') {
+      titleEl.textContent = 'Confirm Action';
+      cancelBtn.style.display = 'block';
+      cancelBtn.textContent = 'Cancel';
+      inputContainer.style.display = 'none';
+    } else if (type === 'prompt') {
+      titleEl.textContent = 'Input Required';
+      cancelBtn.style.display = 'block';
+      cancelBtn.textContent = 'Cancel';
+      inputContainer.style.display = 'block';
+      inputEl.value = defaultValue;
+    }
+
+    msgEl.textContent = message;
+    modal.style.display = 'block';
+
+    if (type === 'prompt') inputEl.focus();
+
+    // Handlers
+    const close = () => {
+      modal.style.display = 'none';
+      cleanup();
+    };
+
+    const onOk = () => {
+      close();
+      if (type === 'prompt') resolve(inputEl.value);
+      else resolve(true);
+    };
+
+    const onCancel = () => {
+      close();
+      if (type === 'prompt') resolve(null);
+      else resolve(false);
+    };
+
+    function cleanup() {
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+    }
+
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+}
+
+async function customAlert(msg) { await showCustomDialog('alert', msg); }
+async function customConfirm(msg) { return await showCustomDialog('confirm', msg); }
+async function customPrompt(msg, val = '') { return await showCustomDialog('prompt', msg, val); }
 
 // Load students (replace dummy with API)
 async function loadStudents(page = 1) {
@@ -81,6 +156,7 @@ async function loadStudents(page = 1) {
         <td>${student.course || '-'}</td>
         <td class="actions">
           <button onclick="viewStudentHistory(${student.id}, '${student.fullname || student.username}')" class="action-btn" style="background:#3498db; color:white; margin-right:5px;"><i class="fas fa-history"></i> History</button>
+          <button onclick="resetStudentPassword('${student.id}')" class="action-btn" style="background:#f39c12; color:white; margin-right:5px;" title="Reset Password"><i class="fas fa-key"></i></button>
           <button onclick="editStudent('${student.id}')" class="action-btn edit"><i class="fas fa-edit"></i></button>
           <button onclick="confirmDelete('${student.id}')" class="action-btn delete"><i class="fas fa-trash"></i></button>
         </td>
@@ -96,7 +172,7 @@ async function loadStudents(page = 1) {
 // Edit student
 // Edit student
 async function editStudent(id) {
-  const newUsername = prompt('Enter new username:');
+  const newUsername = await customPrompt('Enter new username:');
   if (newUsername === null) return;
 
   try {
@@ -107,32 +183,32 @@ async function editStudent(id) {
     });
     const data = await res.json();
     if (res.ok) {
-      alert(data.message);
+      await customAlert(data.message);
       loadStudents(currentPage);
     } else {
-      alert("Error: " + (data.error || data.message));
+      await customAlert("Error: " + (data.error || data.message));
     }
   } catch (err) {
-    alert("Failed to update: " + err.message);
+    await customAlert("Failed to update: " + err.message);
   }
 }
 
 // Delete student
 // Delete student
 async function confirmDelete(id) {
-  if (confirm('Are you sure you want to delete this student?')) {
+  if (await customConfirm('Are you sure you want to delete this student?')) {
     try {
       const res = await fetch(`/api/students/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (res.ok) {
-        alert(data.message);
+        await customAlert(data.message);
         loadStudents(currentPage);
         loadDashboardStats();
       } else {
-        alert("Error: " + (data.error || "Could not delete"));
+        await customAlert("Error: " + (data.error || "Could not delete"));
       }
     } catch (err) {
-      alert("Failed to delete: " + err.message);
+      await customAlert("Failed to delete: " + err.message);
     }
   }
 }
@@ -160,22 +236,22 @@ async function performSystemAction(actionType) {
     return;
   }
 
-  if (!confirm(message)) return;
+  if (!await customConfirm(message)) return;
 
   try {
     const res = await fetch(url, { method: 'POST' });
     const data = await res.json();
     if (res.ok) {
-      alert(data.message);
+      await customAlert(data.message);
       // Refresh everything
       loadDashboardStats();
       loadStudents(currentPage);
       loadStudentActivity();
     } else {
-      alert("Error: " + (data.error || "Action failed"));
+      await customAlert("Error: " + (data.error || "Action failed"));
     }
   } catch (err) {
-    alert("System Error: " + err.message);
+    await customAlert("System Error: " + err.message);
   }
 }
 
@@ -242,8 +318,8 @@ function filterAttempts() {
 }
 
 // Reset Attempt (Allow Retest)
-async function resetAttempt(studentId, examId) {
-  if (!confirm("Are you sure you want to allow this student to RETAKE the exam? This will wipe their current score.")) return;
+async function resetAttempt(studentId, examId, fromHistory = false) {
+  if (!await customConfirm("Are you sure you want to allow this student to RETAKE the exam? This will wipe their current score.")) return;
 
   try {
     const res = await fetch('/api/attempts/reset', {
@@ -257,12 +333,17 @@ async function resetAttempt(studentId, examId) {
       showToast(data.message);
       loadAttempts(); // Refresh table
       loadStudentActivity(); // Refresh activity
+
+      // If called from history modal, refresh it
+      if (fromHistory && currentHistoryStudentId === studentId) {
+        loadHistoryData(studentId);
+      }
     } else {
-      alert("Error: " + data.message);
+      await customAlert("Error: " + data.message);
     }
   } catch (err) {
     console.error(err);
-    alert("Failed to reset attempt.");
+    await customAlert("Failed to reset attempt.");
   }
 }
 
@@ -270,7 +351,7 @@ async function resetAttempt(studentId, examId) {
 
 // Error
 function showAdminError(msg) {
-  alert("Admin Error: " + msg);
+  customAlert("Admin Error: " + msg);
 }
 
 // Load created exams
@@ -315,7 +396,7 @@ document.getElementById('createExamForm').addEventListener('submit', async (e) =
   const fileInput = document.getElementById('examFile');
 
   if (!title || !start_time || !duration_minutes || !course || !fileInput.files[0]) {
-    alert("Please fill all required fields, including Course, and upload a file!");
+    await customAlert("Please fill all required fields, including Course, and upload a file!");
     return;
   }
 
@@ -345,11 +426,11 @@ document.getElementById('createExamForm').addEventListener('submit', async (e) =
       document.getElementById('createExamForm').reset(); // Clear form
       loadCreatedExams(); // Refresh list
     } else {
-      alert("Error: " + (data.error || "Something went wrong"));
+      await customAlert("Error: " + (data.error || "Something went wrong"));
     }
   } catch (err) {
     console.error("Exam creation failed:", err);
-    alert("Failed to create exam. Check console for details.");
+    await customAlert("Failed to create exam. Check console for details.");
   }
 });
 
@@ -577,34 +658,9 @@ async function loadHistoryData(studentId) {
   }
 }
 
-// Updated Reset Attempt to handle refresh
-async function resetAttempt(studentId, examId, fromHistory = false) {
-  if (!confirm("Are you sure you want to allow this student to RETAKE the exam? This will wipe their current score.")) return;
-
-  try {
-    const res = await fetch('/api/attempts/reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ student_id: studentId, exam_id: examId })
-    });
-    const data = await res.json();
-
-    if (res.ok) {
-      showToast(data.message);
-      loadAttempts(); // Refresh main table
-      loadStudentActivity(); // Refresh activity
-
-      // If called from history modal, refresh it
-      if (fromHistory && currentHistoryStudentId === studentId) {
-        loadHistoryData(studentId);
-      }
-    } else {
-      alert("Error: " + data.message);
-    }
-  } catch (err) {
-    console.error(err);
-    alert("Failed to reset attempt.");
-  }
+// Wrapper for resetAttempt
+async function historyResetAttempt(studentId, examId) {
+  await resetAttempt(studentId, examId, true);
 }
 
 // Close modal when clicking outside
@@ -612,5 +668,172 @@ window.onclick = function (event) {
   const modal = document.getElementById('studentHistoryModal');
   if (event.target == modal) {
     closeHistoryModal();
+  }
+}
+
+
+/* ===========================
+   Admin Management Handlers
+   =========================== */
+
+// Create Admin
+const createAdminForm = document.getElementById('createAdminForm');
+if (createAdminForm) {
+  createAdminForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = document.getElementById('newAdminUsername').value;
+    const password = document.getElementById('newAdminPassword').value;
+
+    try {
+      const res = await fetch('/api/admin/create-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        await customAlert(data.message);
+        createAdminForm.reset();
+      } else {
+        await customAlert("Error: " + (data.error || "Failed to create admin"));
+      }
+    } catch (err) {
+      await customAlert("Error: " + err.message);
+    }
+  });
+}
+
+// Change Admin Password
+const changeAdminPassForm = document.getElementById('changeAdminPasswordForm');
+if (changeAdminPassForm) {
+  changeAdminPassForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = document.getElementById('currentAdminUsername').value;
+    const old_password = document.getElementById('currentAdminOldPass').value;
+    const new_password = document.getElementById('currentAdminNewPass').value;
+
+    try {
+      const res = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, old_password, new_password })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        await customAlert(data.message);
+        changeAdminPassForm.reset();
+      } else {
+        await customAlert("Error: " + (data.error || "Failed to change password"));
+      }
+    } catch (err) {
+      await customAlert("Error: " + err.message);
+    }
+  });
+}
+
+// Reset Student Password
+async function resetStudentPassword(studentId) {
+  const newPassword = await customPrompt("Enter new password for this student:");
+  if (!newPassword) return; // Cancelled
+
+  try {
+    const res = await fetch('/api/admin/reset-student-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: studentId, new_password: newPassword })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      await customAlert(data.message);
+    } else {
+      await customAlert("Error: " + (data.error || "Failed to reset password"));
+    }
+  } catch (err) {
+    await customAlert("Error: " + err.message);
+  }
+}
+
+/* ===========================
+   Coding Challenges Management
+   =========================== */
+
+// Create Challenge
+const createChallengeForm = document.getElementById('createChallengeForm');
+if (createChallengeForm) {
+  createChallengeForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = document.getElementById('chalTitle').value;
+    const description = document.getElementById('chalDesc').value;
+    const example_input = document.getElementById('chalInput').value;
+    const example_output = document.getElementById('chalOutput').value;
+
+    try {
+      const res = await fetch('/api/admin/challenges', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description, example_input, example_output })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast("Challenge Created!");
+        createChallengeForm.reset();
+        loadChallenges();
+      } else {
+        await customAlert("Error: " + data.error);
+      }
+    } catch (err) {
+      console.error(err);
+      await customAlert("Failed to create challenge.");
+    }
+  });
+}
+
+// Load Challenges
+async function loadChallenges() {
+  const list = document.getElementById('challengesList');
+  if (!list) return;
+
+  try {
+    const res = await fetch('/api/admin/challenges');
+    const challenges = await res.json();
+
+    if (challenges.length === 0) {
+      list.innerHTML = "<p>No challenges created yet.</p>";
+      return;
+    }
+
+    list.innerHTML = challenges.map(c => `
+      <div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #eee;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h4 style="margin:0;">${c.title}</h4>
+          <button onclick="deleteChallenge(${c.id})" style="background:none; border:none; color:red; cursor:pointer;">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+        <p style="margin: 5px 0; font-size: 0.9em; color:#555;">${c.description.substring(0, 50)}...</p>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error("Error loading challenges:", err);
+    list.innerHTML = "<p>Error loading challenges.</p>";
+  }
+}
+
+// Delete Challenge
+async function deleteChallenge(id) {
+  if (!await customConfirm("Delete this challenge?")) return;
+  try {
+    const res = await fetch(`/api/admin/challenges/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      showToast("Challenge deleted");
+      loadChallenges();
+    } else {
+      await customAlert("Failed to delete");
+    }
+  } catch (err) {
+    console.error(err);
   }
 }

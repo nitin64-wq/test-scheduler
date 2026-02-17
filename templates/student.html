@@ -10,6 +10,13 @@
   <link rel="stylesheet" href="/static/style1.css">
   <link rel="stylesheet" href="/static/student-sidebar.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- CodeMirror for Coding Playground -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/closebrackets.min.js"></script>
 </head>
 
 <body>
@@ -25,6 +32,7 @@
         <a href="#" class="nav-link" data-target="progress-section"><i class="fas fa-chart-line"></i> Progress &
           Matrix</a>
         <a href="#" class="nav-link" data-target="exams-section"><i class="fas fa-file-alt"></i> Exams</a>
+        <a href="#" class="nav-link" data-target="coding-section"><i class="fas fa-code"></i> Coding Arena</a>
       </nav>
       <div class="sidebar-footer">
         <button onclick="logout()" class="logout-btn-sidebar"><i class="fas fa-sign-out-alt"></i> Logout</button>
@@ -116,6 +124,65 @@
           <div id="examList" class="quiz-list"></div>
         </div>
 
+        <!-- Coding Arena Section -->
+        <section id="coding-section" style="display:none;">
+          <div class="coding-playground" style="display: flex; height: 80vh; gap: 10px;">
+            <!-- Left: Problem Statement -->
+            <div class="problem-pane"
+              style="flex: 1; background: white; padding: 20px; border-radius: 8px; overflow-y: auto;">
+              <h3>💻 Coding Challenge</h3>
+              <div style="margin-bottom: 20px;">
+                <label>Select Challenge:</label>
+                <select id="challengeSelect" onchange="loadSelectedChallenge()"
+                  style="width: 100%; padding: 8px; margin-top: 5px;">
+                  <option value="" disabled selected>Select a challenge...</option>
+                </select>
+              </div>
+
+              <div id="problemDescription">
+                <p>Please select a challenge to begin.</p>
+              </div>
+
+              <div style="margin-top: 20px;">
+                <label>Select Language:</label>
+                <select id="codeLanguage" style="width: 100%; padding: 8px; margin-top: 5px;">
+                  <option value="python">Python 3</option>
+                  <!-- Future: Add C++, Java -->
+                </select>
+              </div>
+            </div>
+
+            <!-- Right: Code Editor & Output -->
+            <div class="editor-pane" style="flex: 2; display: flex; flex-direction: column; gap: 10px;">
+              <div class="editor-container"
+                style="flex: 2; border-radius: 8px; overflow: hidden; border: 1px solid #ccc;">
+                <textarea id="codeEditor"># Write your code here
+def solve(arr):
+    # Your logic here
+    pass
+
+# Test your code
+print(solve([1, 2, 3]))
+</textarea>
+              </div>
+
+              <div class="controls" style="display: flex; gap: 10px;">
+                <button onclick="runCode()" class="action-btn" style="background: #2ecc71; color: white;">Run
+                  Code</button>
+                <button onclick="submitCode()" class="action-btn"
+                  style="background: #3498db; color: white;">Submit</button>
+                <span id="runStatus" style="margin-left: auto; align-self: center; font-weight: bold;"></span>
+              </div>
+
+              <div class="output-container"
+                style="flex: 1; background: #1e1e1e; color: #f1f1f1; padding: 15px; border-radius: 8px; font-family: monospace; overflow: auto;">
+                <strong>Output:</strong>
+                <pre id="codeOutput" style="white-space: pre-wrap;">Waiting for execution...</pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
       </div> <!-- End dashboard-container -->
 
 
@@ -170,6 +237,7 @@
       <!-- Google API must load first -->
       <!-- <script src="https://apis.google.com/js/api.js" onload="initGoogleAPI()"></script> -->
       <script src="/static/script.js"></script>
+      <script src="/static/coding_logic.js"></script>
       <!-- <script src="{{ url_for('static', filename='script.js') }}"></script> -->
 
 
@@ -186,6 +254,26 @@
       </script>
 
     </main>
+  </div>
+
+  <!-- Custom Alert/Confirm/Prompt Modal -->
+  <div id="customDialogModal" class="modal"
+    style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.5);">
+    <div class="modal-content"
+      style="background-color:#fefefe; margin:15% auto; padding:20px; border:1px solid #888; width:90%; max-width:400px; border-radius:8px; text-align:center;">
+      <h3 id="dialogTitle" style="margin-top:0; color:#333;">Alert</h3>
+      <p id="dialogMessage" style="color:#555; margin:15px 0;">Message goes here...</p>
+
+      <div id="dialogInputContainer" style="display:none; margin:15px 0;">
+        <input type="text" id="dialogInput" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+      </div>
+
+      <div style="display:flex; justify-content:center; gap:10px; margin-top:20px;">
+        <button id="dialogCancelBtn" class="action-btn"
+          style="background:#e74c3c; color:white; display:none;">Cancel</button>
+        <button id="dialogOkBtn" class="action-btn" style="background:#2ecc71; color:white;">OK</button>
+      </div>
+    </div>
   </div>
 
   <link rel="stylesheet" href="/static/footer.css"> <!-- always after -->

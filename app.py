@@ -11,6 +11,7 @@ import json
 import os
 import base64
 import uuid
+import sys
 from dotenv import load_dotenv
  
 try:
@@ -41,6 +42,10 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 @app.route('/')
 def home():
     return render_template('index.html')
+
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204
 
 @app.route('/login')
 def login_page():
@@ -205,8 +210,16 @@ def login():
 
         # Admin check
         if role == 'admin':
-            if username == 'admin' and password == 'admin123':
-                return jsonify({'success': True, 'role': 'admin'})
+            conn = connect_db()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM admins WHERE username = %s", (username,))
+            admin = cursor.fetchone()
+            
+            if admin and bcrypt.checkpw(password.encode('utf-8'), admin['password'].encode('utf-8')):
+                return jsonify({'success': True, 'role': 'admin', 'username': admin['username']})
+            elif username == 'admin' and password == 'admin123': # Fallback for initial setup if DB fails/empty
+                return jsonify({'success': True, 'role': 'admin', 'username': 'admin'})
+                
             return jsonify({'success': False, 'message': 'Invalid admin credentials'}), 401
 
         # Student check
@@ -234,6 +247,93 @@ def login():
     finally:
         if cursor: cursor.close()
         if conn and conn.is_connected(): conn.close()
+
+# ✅ Create New Admin
+@app.route('/api/admin/create-admin', methods=['POST'])
+def create_admin():
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+
+        if not username or not password:
+            return jsonify({'error': 'Username and password required'}), 400
+
+        # Check if username exists
+        cursor.execute("SELECT id FROM admins WHERE username = %s", (username,))
+        if cursor.fetchone():
+            return jsonify({'error': 'Admin username already exists'}), 400
+
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        cursor.execute("INSERT INTO admins (username, password) VALUES (%s, %s)", (username, hashed_password))
+        conn.commit()
+
+        return jsonify({'message': 'New admin created successfully'}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# ✅ Change Admin Password
+@app.route('/api/admin/change-password', methods=['POST'])
+def change_admin_password():
+    conn = connect_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+
+        if not all([username, old_password, new_password]):
+            return jsonify({'error': 'Missing fields'}), 400
+
+        cursor.execute("SELECT * FROM admins WHERE username = %s", (username,))
+        admin = cursor.fetchone()
+
+        if not admin or not bcrypt.checkpw(old_password.encode('utf-8'), admin['password'].encode('utf-8')):
+            return jsonify({'error': 'Invalid current password'}), 401
+
+        new_hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
+        cursor.execute("UPDATE admins SET password = %s WHERE id = %s", (new_hashed, admin['id']))
+        conn.commit()
+
+        return jsonify({'message': 'Password updated successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# ✅ Reset Student Password (by Admin)
+@app.route('/api/admin/reset-student-password', methods=['POST'])
+def reset_student_password():
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        data = request.get_json()
+        student_id = data.get('student_id')
+        new_password = data.get('new_password')
+
+        if not student_id or not new_password:
+            return jsonify({'error': 'Student ID and new password required'}), 400
+
+        hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        cursor.execute("UPDATE students SET password = %s WHERE id = %s", (hashed_password, student_id))
+        conn.commit()
+
+        return jsonify({'message': 'Student password reset successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 # ✅ Create new exam with file upload
 @app.route('/api/exams', methods=['POST'])
@@ -341,43 +441,41 @@ def create_exam():
                 count_skipped = 0
 
                 for index, row in df.iterrows():
-                    # Get values using the map
+                    # Check if the question cell is actually empty using pandas isna()
                     q_val = row[final_col_map['question_text']]
-                    
-                    # Skip rows where question_text is empty
-                    if str(q_val).strip() == '':
+                    if pd.isna(q_val) or str(q_val).strip() == '':
                         count_skipped += 1
                         continue
 
-                    # Helper to clean text
+                    # A more robust function to clean cells
                     def clean_cell(val):
+                        if pd.isna(val): 
+                            return ""
                         s = str(val).strip()
-                        if s.endswith('.0'): s = s[:-2] # Handle float 1.0 -> 1
+                        # Fix for Excel automatically converting numbers to floats (e.g., 1.0 to 1)
+                        if s.endswith('.0'): 
+                            s = s[:-2]
                         return s
 
-                    q_text = clean_cell(q_val)
+                    # Extracting and cleaning data for all 50+ questions
+                    q_text = clean_cell(row[final_col_map['question_text']])
                     opt_a = clean_cell(row[final_col_map['option_a']])
                     opt_b = clean_cell(row[final_col_map['option_b']])
                     opt_c = clean_cell(row[final_col_map['option_c']])
                     opt_d = clean_cell(row[final_col_map['option_d']])
                     correct = clean_cell(row[final_col_map['correct_option']])
 
-                    # Ensure options are not empty? 
-                    # If they are empty, we still upload, but maybe we should flag it?
-                    # The user said "not showing options", which implies they are empty.
-                    # We will log it.
-                    if not opt_a and not opt_b:
-                        print(f"WARNING: Row {index} has empty options A/B. Q: {q_text[:20]}...")
-
-                    questions_list.append({
-                        'question_text': q_text,
-                        'option_a': opt_a,
-                        'option_b': opt_b,
-                        'option_c': opt_c,
-                        'option_d': opt_d,
-                        'correct_option': correct
-                    })
-                    count_uploaded += 1
+                    # Only append if the question text exists
+                    if q_text:
+                        questions_list.append({
+                            'question_text': q_text,
+                            'option_a': opt_a,
+                            'option_b': opt_b,
+                            'option_c': opt_c,
+                            'option_d': opt_d,
+                            'correct_option': correct.upper() # Ensure answer is always uppercase
+                        })
+                        count_uploaded += 1
                 
                 print(f"DEBUG: Excel processing complete. Uploaded: {count_uploaded}, Skipped: {count_skipped}")
 
@@ -561,8 +659,13 @@ def submit_exam(exam_id):
     score = 0
     for q in correct_answers:
         qid = str(q["id"])
-        if qid in answers and answers[qid] == q["correct_option"]:
-            score += 1
+        # Normalize: strip whitespace and convert to upper case
+        correct_opt = str(q["correct_option"]).strip().upper()
+        
+        if qid in answers:
+            student_ans = str(answers[qid]).strip().upper()
+            if student_ans == correct_opt:
+                score += 1
 
     total = len(correct_answers)
 
@@ -571,20 +674,26 @@ def submit_exam(exam_id):
     cursor.execute("SELECT id FROM exam_attempts WHERE exam_id = %s AND student_id = %s", (exam_id, student_id))
     existing_attempt = cursor.fetchone()
 
+    # Fetch Student Details for snapshot
+    cursor.execute("SELECT fullname, course FROM students WHERE id = %s", (student_id,))
+    student_details = cursor.fetchone()
+    student_name = student_details['fullname'] if student_details else "Unknown"
+    course_name = student_details['course'] if student_details else "Unknown"
+
     if existing_attempt:
-        # Update existing record (e.g. completing a retest)
+        # Update existing record
         cursor.execute("""
             UPDATE exam_attempts 
-            SET started_at = IFNULL(started_at, NOW()), submitted_at = NOW(), score = %s
+            SET started_at = IFNULL(started_at, NOW()), submitted_at = NOW(), score = %s, student_name = %s, course_name = %s
             WHERE id = %s
-        """, (score, existing_attempt['id']))
+        """, (score, student_name, course_name, existing_attempt['id']))
         exam_attempt_id = existing_attempt['id']
     else:
         # New insert
         cursor.execute("""
-            INSERT INTO exam_attempts (exam_id, student_id, started_at, submitted_at, score)
-            VALUES (%s, %s, NOW(), NOW(), %s)
-        """, (exam_id, student_id, score))
+            INSERT INTO exam_attempts (exam_id, student_id, started_at, submitted_at, score, student_name, course_name)
+            VALUES (%s, %s, NOW(), NOW(), %s, %s, %s)
+        """, (exam_id, student_id, score, student_name, course_name))
         exam_attempt_id = cursor.lastrowid
 
     conn.commit()
@@ -1204,5 +1313,153 @@ def export_results():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ✅ Execute Code (Coding Arena)
+@app.route('/api/run_code', methods=['POST'])
+def run_code():
+    try:
+        data = request.get_json()
+        code = data.get('code')
+        language = data.get('language', 'python')
+        user_input = data.get('input', '')
+
+        if not code:
+            return jsonify({'output': 'No code provided'}), 400
+
+        # Create unique temp file
+        filename = f"temp_code_{uuid.uuid4().hex[:8]}.py"
+        
+        # Use absolute path for temp file to avoid CWD issues
+        abs_filename = os.path.join(os.getcwd(), filename)
+        
+        with open(abs_filename, 'w') as f:
+            f.write(code)
+
+        import subprocess
+        try:
+            # Run the code using the same python interpreter as the server
+            # Use sys.executable to ensure we find python
+            result = subprocess.run(
+                [sys.executable, abs_filename],
+                input=user_input,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            output = result.stdout + result.stderr
+        except subprocess.TimeoutExpired:
+            output = "Error: Execution timed out (Limit: 5 seconds)"
+        except Exception as e:
+            output = f"Error: {str(e)}"
+        finally:
+            # Cleanup
+            if os.path.exists(abs_filename):
+                os.remove(abs_filename)
+
+        return jsonify({'output': output}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ✅ Get Coding Challenges
+@app.route('/api/admin/challenges', methods=['GET'])
+def get_challenges():
+    conn = connect_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM coding_problems ORDER BY created_at DESC")
+        challenges = cursor.fetchall()
+        return jsonify(challenges), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# ✅ Create Coding Challenge
+@app.route('/api/admin/challenges', methods=['POST'])
+def create_challenge():
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        data = request.get_json()
+        title = data.get('title')
+        description = data.get('description')
+        example_input = data.get('example_input', '')
+        example_output = data.get('example_output', '')
+
+        if not title or not description:
+            return jsonify({'error': 'Title and description required'}), 400
+
+        cursor.execute("""
+            INSERT INTO coding_problems (title, description, example_input, example_output)
+            VALUES (%s, %s, %s, %s)
+        """, (title, description, example_input, example_output))
+        conn.commit()
+        return jsonify({'message': 'Challenge created', 'id': cursor.lastrowid}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# ✅ Delete Coding Challenge
+@app.route('/api/admin/challenges/<int:id>', methods=['DELETE'])
+def delete_challenge(id):
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM coding_problems WHERE id = %s", (id,))
+        conn.commit()
+        return jsonify({'message': 'Challenge deleted'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# ✅ Submit Coding Challenge
+@app.route('/api/coding/submit', methods=['POST'])
+def submit_coding_challenge():
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        data = request.get_json()
+        student_id = data.get('student_id')
+        challenge_id = data.get('challenge_id')
+        code = data.get('code')
+        status = data.get('status', 'Pending')
+
+        print(f"DEBUG: Coding submission received. Student: {student_id}, Challenge: {challenge_id}")
+
+        if not student_id or not challenge_id or not code:
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        # Create table if not exists (in case it wasn't created by script)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS coding_submissions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                student_id INT NOT NULL,
+                challenge_id INT NOT NULL,
+                code TEXT NOT NULL,
+                status ENUM('Pending', 'Accepted', 'Rejected') DEFAULT 'Pending',
+                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+                FOREIGN KEY (challenge_id) REFERENCES coding_problems(id) ON DELETE CASCADE
+            )
+        """)
+
+        cursor.execute("""
+            INSERT INTO coding_submissions (student_id, challenge_id, code, status)
+            VALUES (%s, %s, %s, %s)
+        """, (student_id, challenge_id, code, status))
+        conn.commit()
+
+        return jsonify({'message': 'Solution submitted successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)

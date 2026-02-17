@@ -358,6 +358,28 @@
     </div>
     <canvas id="captureCanvas" style="display: none;"></canvas>
 
+    <!-- Custom Alert/Confirm/Prompt Modal -->
+    <div id="customDialogModal" class="modal"
+        style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.5);">
+        <div class="modal-content"
+            style="background-color:#fefefe; margin:15% auto; padding:20px; border:1px solid #888; width:90%; max-width:400px; border-radius:8px; text-align:center;">
+            <h3 id="dialogTitle" style="margin-top:0; color:#333;">Alert</h3>
+            <p id="dialogMessage" style="color:#555; margin:15px 0;">Message goes here...</p>
+
+            <div id="dialogInputContainer" style="display:none; margin:15px 0;">
+                <input type="text" id="dialogInput"
+                    style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            </div>
+
+            <div style="display:flex; justify-content:center; gap:10px; margin-top:20px;">
+                <button id="dialogCancelBtn"
+                    style="background:#e74c3c; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; display:none;">Cancel</button>
+                <button id="dialogOkBtn"
+                    style="background:#2ecc71; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer;">OK</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/exam.js"></script>
 </body>
 

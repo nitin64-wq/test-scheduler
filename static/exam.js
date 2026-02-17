@@ -2,12 +2,100 @@ let warningCount = 0;
 let examSubmitted = false;
 
 
+/* =========================
+   Custom Dialog Logic
+   ========================= */
+
+function escapeHtml(text) {
+    if (!text) return "";
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function showCustomDialog(type, message, defaultValue = '') {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('customDialogModal');
+        if (!modal) {
+            if (type === 'alert') { alert(message); resolve(true); }
+            else if (type === 'confirm') { resolve(confirm(message)); }
+            else if (type === 'prompt') { resolve(prompt(message, defaultValue)); }
+            return;
+        }
+        const titleEl = document.getElementById('dialogTitle');
+        const msgEl = document.getElementById('dialogMessage');
+        const inputContainer = document.getElementById('dialogInputContainer');
+        const inputEl = document.querySelector('#dialogInputContainer input');
+        const okBtn = document.getElementById('dialogOkBtn');
+        const cancelBtn = document.getElementById('dialogCancelBtn');
+
+        // Reset State
+        if (inputEl) inputEl.value = '';
+
+        // UI Setup
+        if (type === 'alert') {
+            titleEl.textContent = 'Alert';
+            cancelBtn.style.display = 'none';
+            inputContainer.style.display = 'none';
+        } else if (type === 'confirm') {
+            titleEl.textContent = 'Confirm Action';
+            cancelBtn.style.display = 'block';
+            cancelBtn.textContent = 'Cancel';
+            inputContainer.style.display = 'none';
+        } else if (type === 'prompt') {
+            titleEl.textContent = 'Input Required';
+            cancelBtn.style.display = 'block';
+            cancelBtn.textContent = 'Cancel';
+            inputContainer.style.display = 'block';
+            inputEl.value = defaultValue;
+        }
+
+        msgEl.textContent = message;
+        modal.style.display = 'block';
+
+        if (type === 'prompt' && inputEl) inputEl.focus();
+
+        // Handlers
+        const close = () => {
+            modal.style.display = 'none';
+            cleanup();
+        };
+
+        const onOk = () => {
+            close();
+            if (type === 'prompt') resolve(inputEl ? inputEl.value : null);
+            else resolve(true);
+        };
+
+        const onCancel = () => {
+            close();
+            if (type === 'prompt') resolve(null);
+            else resolve(false);
+        };
+
+        function cleanup() {
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+        }
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+    });
+}
+
+async function customAlert(msg) { await showCustomDialog('alert', msg); }
+async function customConfirm(msg) { return await showCustomDialog('confirm', msg); }
+async function customPrompt(msg, val = '') { return await showCustomDialog('prompt', msg, val); }
+
 document.addEventListener('DOMContentLoaded', async () => {
     const examId = window.location.pathname.split('/').pop();
 
     // Check login
     if (!localStorage.getItem('user')) {
-        alert("Please login first");
+        await customAlert("Please login first");
         window.location.href = '/login';
         return;
     }
@@ -16,7 +104,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const studentId = studentData.id;
 
     if (!studentId) {
-        alert("Student ID missing. Please login again.");
+        await customAlert("Student ID missing. Please login again.");
         window.location.href = '/login';
         return;
     }
@@ -26,7 +114,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const res = await fetch(`/api/exams/${examId}/attempted?student_id=${studentId}`);
         const data = await res.json();
         if (data.attempted) {
-            alert("You have already attempted this exam.");
+            await customAlert("You have already attempted this exam.");
             window.location.href = '/student';
             return;
         }
@@ -46,7 +134,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const entryTime = new Date(examStartTime.getTime() - 5 * 60000);
 
             if (now < entryTime) {
-                alert(`⏳ This exam hasn't started yet.\nIt starts at: ${examStartTime.toLocaleString()}\nYou can enter 5 minutes early for system checks.`);
+                await customAlert(`⏳ This exam hasn't started yet.\nIt starts at: ${examStartTime.toLocaleString()}\nYou can enter 5 minutes early for system checks.`);
                 window.location.href = '/student';
                 return;
             }
@@ -144,7 +232,7 @@ async function runPreStartChecks(examId) {
     // The user asked for "exam start before 5minutest check the camera test"
     // We'll enforce it.
 
-    if (confirm("We will now perform a camera and face check. Please ensure your face is clearly visible.")) {
+    if (await customConfirm("We will now perform a camera and face check. Please ensure your face is clearly visible.")) {
         const cameraOk = await performCameraCheck(examId);
         if (!cameraOk) return false;
     } else {
@@ -192,11 +280,11 @@ async function performCameraCheck(examId) {
 
         if (data.deepface && data.deepface.violation_type !== 'face_ok') {
             if (data.deepface.violation_type === 'no_face_detected') {
-                alert("❌ No face detected! Please center your face in the camera.");
+                await customAlert("❌ No face detected! Please center your face in the camera.");
             } else if (data.deepface.violation_type === 'multiple_faces_detected') {
-                alert("❌ Multiple faces detected! Only the candidate should be visible.");
+                await customAlert("❌ Multiple faces detected! Only the candidate should be visible.");
             } else {
-                alert("❌ Face validation failed: " + data.deepface.violation_type);
+                await customAlert("❌ Face validation failed: " + data.deepface.violation_type);
             }
             if (statusEl) statusEl.innerText = "Check Failed ❌";
             return false;
@@ -207,7 +295,7 @@ async function performCameraCheck(examId) {
 
     } catch (err) {
         console.error("DeepFace check failed", err);
-        alert("System check error. Please try again.");
+        await customAlert("System check error. Please try again.");
         return false;
     }
 }
@@ -228,7 +316,7 @@ async function verifyExamPasswordIfRequired(examId, exam) {
     if (!exam || !exam.has_password) return true;
 
     for (let attempts = 0; attempts < 3; attempts++) {
-        const password = prompt('Enter exam password to start:');
+        const password = await customPrompt('Enter exam password to start:');
         if (password === null) return false;
 
         try {
@@ -239,15 +327,15 @@ async function verifyExamPasswordIfRequired(examId, exam) {
             });
             const data = await res.json();
             if (res.ok && data.verified) return true;
-            alert('Incorrect exam password.');
+            await customAlert('Incorrect exam password.');
         } catch (err) {
             console.error('Password verification failed:', err);
-            alert('Password verification failed. Please try again.');
+            await customAlert('Password verification failed. Please try again.');
             return false;
         }
     }
 
-    alert('Too many incorrect password attempts.');
+    await customAlert('Too many incorrect password attempts.');
     return false;
 }
 
@@ -337,7 +425,7 @@ function startTimer(durationMinutes, examId) {
     const timerDisplay = document.getElementById('timer');
 
     // Clear any existing timer if strictly needed, though we only start once.
-    const timerInterval = setInterval(() => {
+    const timerInterval = setInterval(async () => {
         if (examSubmitted) {
             clearInterval(timerInterval);
             return;
@@ -347,7 +435,7 @@ function startTimer(durationMinutes, examId) {
             clearInterval(timerInterval);
             timerDisplay.innerText = "Time Left: 00:00";
             if (!examSubmitted) {
-                alert("Time is up! Submitting exam.");
+                await customAlert("Time is up! Submitting exam.");
                 submitExam(examId);
             }
             return;
@@ -372,7 +460,7 @@ function preventShortcuts(e) {
     if (e.key === 'F12' || e.keyCode === 123) {
         e.preventDefault();
         e.stopPropagation();
-        alert("Action disabled: Inspect Element is not allowed.");
+        customAlert("Action disabled: Inspect Element is not allowed.");
         return false;
     }
 
@@ -383,7 +471,7 @@ function preventShortcuts(e) {
     ) {
         e.preventDefault();
         e.stopPropagation();
-        alert("Action disabled: Viewing source or console is not allowed.");
+        customAlert("Action disabled: Viewing source or console is not allowed.");
         return false;
     }
 
@@ -398,7 +486,7 @@ function preventShortcuts(e) {
     ) {
         e.preventDefault();
         e.stopPropagation();
-        alert("Action disabled: Cut, Copy, Paste, and Select All are not allowed.");
+        customAlert("Action disabled: Cut, Copy, Paste, and Select All are not allowed.");
         return false;
     }
 
@@ -479,12 +567,12 @@ async function loadQuestions(examId) {
         // 1. Render Questions
         container.innerHTML = questions.map((q, index) => `
             <div class="question-card" id="q-card-${index}">
-                <div class="question-text">Q${index + 1}. ${q.question_text}</div>
+                <div class="question-text">Q${index + 1}. ${escapeHtml(q.question_text)}</div>
                 <ul class="options-list">
-                    ${renderOption(q, 'a', 'A', index)}
-                    ${renderOption(q, 'b', 'B', index)}
-                    ${renderOption(q, 'c', 'C', index)}
-                    ${renderOption(q, 'd', 'D', index)}
+                    ${renderOptionSecure(q, 'a', 'A', index)}
+                    ${renderOptionSecure(q, 'b', 'B', index)}
+                    ${renderOptionSecure(q, 'c', 'C', index)}
+                    ${renderOptionSecure(q, 'd', 'D', index)}
                 </ul>
             </div>
         `).join('');
@@ -509,7 +597,7 @@ async function loadQuestions(examId) {
 
     } catch (err) {
         console.error(err);
-        alert("Error loading exam questions");
+        await customAlert("Error loading exam questions");
     }
 }
 
@@ -531,18 +619,20 @@ function markAnswered(index) {
     }
 }
 
-function renderOption(q, key, label, index) {
+// Secure Option Renderer
+function renderOptionSecure(q, key, label, index) {
     const val = q[`option_${key}`];
     if (!val) return '';
     return `
         <li>
             <label>
                 <input type="radio" name="q_${q.id}" value="${label}" data-index="${index}">
-                <span class="option-label">${label}. ${val}</span>
+                <span class="option-label">${label}. ${escapeHtml(val)}</span>
             </label>
         </li>
     `;
 }
+
 
 
 
@@ -588,15 +678,15 @@ async function submitExam(examId, forced = false) {
             if (forced) {
                 msg = "Exam Auto-Submitted due to violation!\n" + msg;
             }
-            alert(msg);
+            await customAlert(msg);
             window.location.href = '/student';
         } else {
-            alert("Submission failed: " + result.error);
+            await customAlert("Submission failed: " + result.error);
             examSubmitted = false;
         }
     } catch (err) {
         console.error(err);
-        alert("Error submitting exam");
+        await customAlert("Error submitting exam");
         examSubmitted = false;
     }
 }

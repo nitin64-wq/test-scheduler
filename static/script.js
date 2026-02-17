@@ -114,15 +114,96 @@ function logout() {
   window.location.href = "/login";
 }
 
+/* =========================
+   Custom Dialog Logic
+   ========================= */
 
-function setNoteReminder() {
+function showCustomDialog(type, message, defaultValue = '') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('customDialogModal');
+    if (!modal) {
+      // Fallback if modal missing
+      if (type === 'alert') { alert(message); resolve(true); }
+      else if (type === 'confirm') { resolve(confirm(message)); }
+      else if (type === 'prompt') { resolve(prompt(message, defaultValue)); }
+      return;
+    }
+    const titleEl = document.getElementById('dialogTitle');
+    const msgEl = document.getElementById('dialogMessage');
+    const inputContainer = document.getElementById('dialogInputContainer');
+    const inputEl = document.querySelector('#dialogInputContainer input');
+    const okBtn = document.getElementById('dialogOkBtn');
+    const cancelBtn = document.getElementById('dialogCancelBtn');
+
+    // Reset State
+    if (inputEl) inputEl.value = '';
+
+    // UI Setup
+    if (type === 'alert') {
+      titleEl.textContent = 'Alert';
+      cancelBtn.style.display = 'none';
+      inputContainer.style.display = 'none';
+    } else if (type === 'confirm') {
+      titleEl.textContent = 'Confirm Action';
+      cancelBtn.style.display = 'block';
+      cancelBtn.textContent = 'Cancel';
+      inputContainer.style.display = 'none';
+    } else if (type === 'prompt') {
+      titleEl.textContent = 'Input Required';
+      cancelBtn.style.display = 'block';
+      cancelBtn.textContent = 'Cancel';
+      inputContainer.style.display = 'block';
+      inputEl.value = defaultValue;
+    }
+
+    msgEl.textContent = message;
+    modal.style.display = 'block';
+
+    if (type === 'prompt' && inputEl) inputEl.focus();
+
+    // Handlers
+    const close = () => {
+      modal.style.display = 'none';
+      cleanup();
+    };
+
+    const onOk = () => {
+      close();
+      if (type === 'prompt') resolve(inputEl ? inputEl.value : null);
+      else resolve(true);
+    };
+
+    const onCancel = () => {
+      close();
+      if (type === 'prompt') resolve(null);
+      else resolve(false);
+    };
+
+    function cleanup() {
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+    }
+
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+}
+
+async function customAlert(msg) { await showCustomDialog('alert', msg); }
+async function customConfirm(msg) { return await showCustomDialog('confirm', msg); }
+async function customPrompt(msg, val = '') { return await showCustomDialog('prompt', msg, val); }
+
+
+
+
+async function setNoteReminder() {
   const reminderType = document.getElementById("reminderType").value;
   const reminderTime = document.getElementById("noteReminderTime").value;
   const email = document.getElementById("reminderEmail").value;
   const notesArea = document.getElementById("notesArea");
 
   if (!reminderTime) {
-    alert("Please select a reminder time");
+    await customAlert("Please select a reminder time");
     return;
   }
 
@@ -143,7 +224,7 @@ function setNoteReminder() {
   scheduleNotification(reminder);
   if (email) scheduleEmailNotification(reminder);
 
-  alert(`Reminder set for ${new Date(reminderTime).toLocaleString()}`);
+  await customAlert(`Reminder set for ${new Date(reminderTime).toLocaleString()}`);
 }
 
 function renderNoteReminders() {
@@ -187,9 +268,9 @@ function scheduleNotification(reminder) {
   }
 }
 
-function showNotification(message) {
+async function showNotification(message) {
   if (!("Notification" in window)) {
-    alert(message);
+    await customAlert(message);
     return;
   }
 
@@ -201,7 +282,7 @@ function showNotification(message) {
     });
   }
 
-  alert(message);
+  await customAlert(message);
 }
 
 function loadNoteReminders() {
@@ -213,7 +294,7 @@ function loadNoteReminders() {
 function saveNotes() {
   const notesArea = document.getElementById("notesArea");
   localStorage.setItem("savedNotes", notesArea.value);
-  alert("Notes saved successfully!");
+  customAlert("Notes saved successfully!");
 }
 
 function loadNotes() {
@@ -319,9 +400,9 @@ function renderTakeTestButton() {
   if (!btn) return;
 
   btn.className = "take-test-btn";
-  btn.addEventListener("click", () => {
+  btn.addEventListener("click", async () => {
     recordTestCompletion();
-    alert("Test completed! Progress updated.");
+    await customAlert("Test completed! Progress updated.");
   });
 }
 
