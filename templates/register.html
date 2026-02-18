@@ -5,69 +5,344 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Register | NTP</title>
-  <!-- <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"> -->
   <link rel="stylesheet" href="/static/style.css">
+  <style>
+    /* Specific overrides for Registration Page */
+    body {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0;
+      /* Background is handled in style.css */
+    }
+
+    .register-card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 40px;
+      width: 100%;
+      max-width: 450px;
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: white;
+    }
+
+    .register-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .register-header h1 {
+      font-size: 2.5rem;
+      margin: 0;
+      color: white;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .register-header h2 {
+      font-size: 1.2rem;
+      font-weight: 300;
+      margin-top: 5px;
+      opacity: 0.9;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      max-width: 100% !important;
+      /* Override style.css */
+      padding: 0 !important;
+      /* Override style.css */
+      box-shadow: none !important;
+      /* Override style.css */
+      background: transparent !important;
+    }
+
+    #registerForm {
+      display: flex !important;
+      flex-direction: column;
+      gap: 15px;
+      max-width: 100% !important;
+      margin: 0 auto;
+    }
+
+    #registerForm input,
+    #registerForm select,
+    #registerForm button {
+      margin: 0;
+      box-sizing: border-box;
+    }
+
+    .input-group {
+      position: relative;
+    }
+
+    .input-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #e0e0e0;
+    }
+
+    .input-group input,
+    .input-group select {
+      width: 100%;
+      padding: 12px 15px;
+      background: rgba(255, 255, 255, 0.9);
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      color: #333;
+      box-sizing: border-box;
+      /* Critical for padding */
+      margin: 0;
+      /* Override style.css margins */
+    }
+
+    .input-group input:focus,
+    .input-group select:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.5);
+    }
+
+    /* OTP Section Styling */
+    .otp-section {
+      background: rgba(0, 0, 0, 0.2);
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 5px;
+    }
+
+    .email-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      /* Align input and button at the bottom */
+    }
+
+    .email-row .input-wrapper {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* Ensure input inside this specific row matches the button height */
+    .email-row input {
+      height: 45px !important;
+      box-sizing: border-box;
+      margin: 0;
+    }
+
+    #sendOtpBtn {
+      padding: 0 20px;
+      background: #f39c12;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      white-space: nowrap;
+      height: 45px;
+      /* Match input height */
+      align-self: auto;
+      margin: 0;
+      transition: background 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #sendOtpBtn:hover {
+      background: #e67e22;
+    }
+
+    #sendOtpBtn:disabled {
+      background: #95a5a6;
+      cursor: not-allowed;
+    }
+
+    .otp-input-row {
+      margin-top: 10px;
+    }
+
+    /* Terms */
+    .terms-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+    }
+
+    #registerForm .terms-group input[type="checkbox"] {
+      width: 16px !important;
+      height: 16px;
+      margin: 0 !important;
+      display: inline-block !important;
+      flex: 0 0 auto;
+      transform: none !important;
+    }
+
+    #registerForm .terms-group label[for="terms"] {
+      margin: 0 !important;
+      display: inline !important;
+      line-height: 1.3 !important;
+    }
+
+    /* Submit Button */
+    .register-btn {
+      background: #2ecc71;
+      color: white;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.3s;
+      margin-top: 10px;
+    }
+
+    .register-btn:hover {
+      background: #27ae60;
+      transform: translateY(-2px);
+    }
+
+    .login-link {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 0.9rem;
+    }
+
+    .login-link a {
+      color: #f1c40f;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    .login-link a:hover {
+      text-decoration: underline;
+    }
+
+    #registerMessage {
+      text-align: center;
+      margin-top: 15px;
+      min-height: 20px;
+      font-weight: bold;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 480px) {
+      .register-card {
+        padding: 20px;
+      }
+
+      .register-header h1 {
+        font-size: 2rem;
+      }
+
+      .email-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      #sendOtpBtn {
+        width: 100%;
+        margin-top: 10px;
+        height: 45px;
+      }
+    }
+  </style>
 </head>
 
 <body>
-  <div id="ff">
-    <div id="sr">
+  <div class="register-card">
+    <div class="register-header">
       <h1>NTP</h1>
-      <h2>🧑‍🎓 Student Registration</h2>
+      <h2>Student Registration</h2>
     </div>
 
     <form id="registerForm">
-      <label for="fullName">Full Name</label>
-      <input type="text" id="fullName" placeholder="Full name" required>
 
-      <label for="regUsername">Username</label>
-      <input type="text" id="regUsername" placeholder="Username" required>
+      <!-- Full Name -->
+      <div class="input-group">
+        <label for="fullName">Full Name</label>
+        <input type="text" id="fullName" placeholder="e.g. John Doe" required>
+      </div>
 
-      <label for="regPassword">Password</label>
-      <input type="password" id="regPassword" placeholder="Password" required>
+      <!-- Username -->
+      <div class="input-group">
+        <label for="regUsername">Username</label>
+        <input type="text" id="regUsername" placeholder="Choose a username" required>
+      </div>
 
-      <label for="regConfirmPassword">Confirm Password</label>
-      <input type="password" id="regConfirmPassword" placeholder="Confirm Password" required>
+      <!-- Password -->
+      <div class="input-group">
+        <label for="regPassword">Password</label>
+        <input type="password" id="regPassword" placeholder="Minimum 8 characters" required>
+      </div>
 
-      <label for="regEmail">Email</label>
-      <input type="email" id="regEmail" placeholder="Email" required>
+      <div class="input-group">
+        <label for="regConfirmPassword">Confirm Password</label>
+        <input type="password" id="regConfirmPassword" placeholder="Re-enter password" required>
+      </div>
 
-      <label for="regNumber">Phone Number</label>
-      <input type="tel" id="regNumber" placeholder="Mobile number" required>
+      <!-- OTP Section -->
+      <div class="otp-section">
+        <div class="email-row">
+          <div class="input-wrapper">
+            <label for="regEmail">Email Address</label>
+            <input type="email" id="regEmail" placeholder="you@example.com" required>
+          </div>
+          <button type="button" id="sendOtpBtn">Send OTP</button>
+        </div>
 
-      <label for="regCourse">Course</label>
-      <select id="regCourse" required>
-        <option value="" disabled selected>Select your course</option>
-        <option value="Cyber Security">Cyber Security</option>
-        <option value="Web Development">Web Development</option>
-        <option value="AI/ML">AI/ML</option>
-        <option value="Data Science">Data Science</option>
-        <option value="Data Analytics">Data Analytic</option>
-        <option value="Android Development">Android Development</option>
-        <option value="UI/UX">UI/UX</option>
-        <option value="Cloud Computing">Cloud Computing</option>
-      </select>
+        <div class="otp-input-row input-group">
+          <label for="otp">Enter Verification Code</label>
+          <input type="text" id="otp" placeholder="Enter 6-digit code sent to email" required maxlength="6">
+        </div>
+      </div>
 
+      <!-- Phone -->
+      <div class="input-group">
+        <label for="regNumber">Phone Number</label>
+        <input type="tel" id="regNumber" placeholder="Mobile Number" required>
+      </div>
 
+      <!-- Course -->
+      <div class="input-group">
+        <label for="regCourse">Selected Course</label>
+        <select id="regCourse" required>
+          <option value="" disabled selected>Select your course</option>
+          <option value="Cyber Security">Cyber Security</option>
+          <option value="Web Development">Web Development</option>
+          <option value="AI/ML">AI/ML</option>
+          <option value="Data Science">Data Science</option>
+          <option value="Data Analytics">Data Analytic</option>
+          <option value="Android Development">Android Development</option>
+          <option value="UI/UX">UI/UX</option>
+          <option value="Cloud Computing">Cloud Computing</option>
+        </select>
+      </div>
 
-      <input type="checkbox" id="terms" name="terms">
-      <label for="terms">Agree to terms and conditions</label>
+      <!-- Terms -->
+      <div class="terms-group">
+        <input type="checkbox" id="terms" name="terms" required>
+        <label for="terms" style="margin:0; display:inline;">I agree to the terms & conditions</label>
+      </div>
 
-      <button class="button" type="submit">Register</button>
+      <button class="register-btn" type="submit">Create Account</button>
 
-      <p style="text-align:center;">Already have an account? <a href="/login">Login here</a></p>
-
+      <p class="login-link">Already have an account? <a href="/login">Login here</a></p>
     </form>
+
+    <div id="registerMessage"></div>
   </div>
 
-  <p id="registerMessage"></p>
-
-
-  <!-- <script src="{{ url_for('static', filename='register.js') }}"></script> -->
   <script src="/static/register.js"></script>
-
-
-  <link rel="stylesheet" href="/static/footer.css"> <!-- always after -->
 </body>
 
 </html>

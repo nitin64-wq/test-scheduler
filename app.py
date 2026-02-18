@@ -53,7 +53,7 @@ def login_page():
 
 @app.route('/register')
 def register_page():
-    return render_template('register.html')
+    return no_cache_response('register.html')
 
 from flask import make_response as flask_make_response
 
@@ -168,17 +168,221 @@ def reset_system():
         cursor.close()
         conn.close()
 
-# ✅ Register new student
+# ... existing imports ...
+import smtplib
+from email.mime.text import MIMEText
+import random
+import string
+import datetime
+# ... other imports ...
+
+def send_otp_email(to_email, otp):
+    sender_email = os.getenv('EMAIL_USER')
+    sender_password = os.getenv('EMAIL_PASS')
+    
+    subject = "Verify Your Account - NTP Registration"
+    
+    # HTML Email Template with Inline CSS
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>NTP OTP Verification</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #f4f4f4;
+                margin: 0;
+                padding: 0;
+            }}
+            .container {{
+                max-width: 600px;
+                margin: 20px auto;
+                background-color: #ffffff;
+                border-radius: 10px;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+                overflow: hidden;
+            }}
+            .header {{
+                background: linear-gradient(135deg, #3498db, #2c3e50);
+                color: #ffffff;
+                padding: 30px;
+                text-align: center;
+            }}
+            .header h1 {{
+                margin: 0;
+                font-size: 28px;
+                font-weight: 700;
+                letter-spacing: 1px;
+            }}
+            .content {{
+                padding: 40px 30px;
+                text-align: center;
+                color: #333333;
+            }}
+            .welcome-text {{
+                font-size: 18px;
+                margin-bottom: 25px;
+                color: #555555;
+            }}
+            .otp-box {{
+                background-color: #f8f9fa;
+                border: 2px dashed #3498db;
+                border-radius: 12px;
+                padding: 20px;
+                display: inline-block;
+                margin: 0 auto 30px;
+            }}
+            .otp-code {{
+                font-size: 36px;
+                font-weight: 800;
+                color: #2c3e50;
+                letter-spacing: 5px;
+                font-family: 'Courier New', monospace;
+            }}
+            .instruction {{
+                font-size: 14px;
+                color: #777777;
+                line-height: 1.6;
+                margin-bottom: 20px;
+            }}
+            .footer {{
+                background-color: #ecf0f1;
+                padding: 20px;
+                text-align: center;
+                font-size: 12px;
+                color: #95a5a6;
+            }}
+            .footer a {{
+                color: #3498db;
+                text-decoration: none;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>NTP Scheduler</h1>
+            </div>
+            <div class="content">
+                <p class="welcome-text">Hello Student!</p>
+                <p class="instruction">You are just one step away from completing your registration. Please use the verification code below to verify your email address.</p>
+                
+                <div class="otp-box">
+                    <span class="otp-code">{otp}</span>
+                </div>
+                
+                <p class="instruction" style="font-size: 13px;">This code is valid for 10 minutes.<br>If you did not request this code, please ignore this email.</p>
+            </div>
+            <div class="footer">
+                <p>&copy; {datetime.datetime.now().year} NTP Scheduler. All rights reserved.</p>
+                <p>Need help? <a href="#">Contact Support</a></p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    msg = MIMEText(html_content, 'html')
+    msg['Subject'] = subject
+    msg['From'] = sender_email
+    msg['To'] = to_email
+    
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, to_email, msg.as_string())
+        return True
+    except Exception as e:
+        print(f"Error sending email: {e}")
+        return False
+
+# ✅ Send OTP
+@app.route('/api/send-otp', methods=['POST'])
+def send_otp():
+    data = request.get_json()
+    email = data.get('email')
+    
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+        
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    # Check if student already exists
+    cursor.execute("SELECT id FROM students WHERE email = %s", (email,))
+    if cursor.fetchone():
+        cursor.close()
+        conn.close()
+        return jsonify({'error': 'Email already registered'}), 400
+
+    # Rate Limiting: Check last OTP sent time
+    cursor.execute("SELECT created_at FROM otp_verifications WHERE email = %s", (email,))
+    last_otp = cursor.fetchone()
+    if last_otp:
+        created_at = last_otp[0]
+        if created_at:
+            # Calculate time difference
+            time_diff = (datetime.datetime.now() - created_at).total_seconds()
+            if time_diff < 60:
+                cursor.close()
+                conn.close()
+                return jsonify({'error': f'Please wait {60 - int(time_diff)} seconds before requesting a new OTP'}), 429
+
+    otp = ''.join(random.choices(string.digits, k=6))
+    
+    try:
+        # Store OTP in DB (Upsert)
+        cursor.execute("""
+            INSERT INTO otp_verifications (email, otp_code, created_at, expires_at)
+            VALUES (%s, %s, NOW(), DATE_ADD(NOW(), INTERVAL 10 MINUTE))
+            ON DUPLICATE KEY UPDATE otp_code = VALUES(otp_code), created_at = NOW(), expires_at = DATE_ADD(NOW(), INTERVAL 10 MINUTE)
+        """, (email, otp))
+        conn.commit()
+    except Exception as e:
+        cursor.close()
+        conn.close()
+        return jsonify({'error': f"Database error: {str(e)}"}), 500
+
+    if send_otp_email(email, otp):
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'OTP sent successfully'}), 200
+    else:
+        cursor.close()
+        conn.close()
+        return jsonify({'error': 'Failed to send OTP email'}), 500
+
 @app.route('/api/register', methods=['POST'])
 def register_student():
     conn = connect_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True) # Use dictionary cursor for easy column access
     try:
         data = request.get_json()
-        required_fields = ['username', 'password', 'email', 'fullName', 'phone', 'course']
+        required_fields = ['username', 'password', 'email', 'fullName', 'phone', 'course', 'otp']
         if not all(field in data for field in required_fields):
-            return jsonify({'error': 'All fields are required'}), 400
+            return jsonify({'error': 'All fields are required, including OTP'}), 400
 
+        email = data['email']
+        otp_input = data['otp']
+
+        # Verify OTP from DB
+        cursor.execute("SELECT otp_code, expires_at FROM otp_verifications WHERE email = %s", (email,))
+        record = cursor.fetchone()
+
+        if not record:
+            return jsonify({'error': 'No OTP found for this email. Please request a new one.'}), 400
+        
+        if record['otp_code'] != otp_input:
+            return jsonify({'error': 'Invalid OTP'}), 400
+            
+        if record['expires_at'] < datetime.datetime.now():
+            return jsonify({'error': 'OTP has expired. Please request a new one.'}), 400
+
+        # Remove OTP after successful verification
+        cursor.execute("DELETE FROM otp_verifications WHERE email = %s", (email,))
+        
         hashed_password = bcrypt.hashpw(data['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
         # Reverted to match original schema (no created_at)

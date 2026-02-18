@@ -694,3 +694,31 @@ form br {
     width: 100%;
   }
 }
+
+/* OTP Section */
+.otp-container {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+}
+
+#sendOtpBtn {
+  width: auto;
+  padding: 10px 15px;
+  background-color: #f39c12;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  white-space: nowrap;
+  height: 43px;
+  /* Match input height roughly */
+  margin-bottom: 20px;
+
+}
+
+#sendOtpBtn:hover {
+  background-color: #d68910;
+}
